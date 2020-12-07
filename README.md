@@ -1,4 +1,3 @@
-TNEI Template Repository
+GB Demand Data Download Tool
 ========================
 
-This is a repository template for TNEI projects.

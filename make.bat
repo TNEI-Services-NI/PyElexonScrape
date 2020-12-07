@@ -1,4 +1,4 @@
-py -m venv venv
+py -3.8 -m venv venv
 cd venv
 cd Scripts
 CALL activate.bat
