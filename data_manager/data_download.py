@@ -140,9 +140,12 @@ def insert_data(message_list, p114_date):
 
         message_list = message_list[1:]
 
-        message_list = [message_list[x:x+49] for x in range(0,len(message_list), 49)]
+        idx_list = [idx for idx, x in enumerate(message_list) if x['message_type']=='GP9']
 
-        df_MPD = pd.concat([pd.DataFrame(GSP[1:]).assign(gsp_id=GSP[0]['gsp_id']) for GSP in message_list])
+        message_list_list = [message_list[idx:idx_list[_id + 1]] if _id < len(idx_list) - 1
+                                                                     else message_list[idx:] for _id, idx
+                                                                        in enumerate(idx_list)]
+        df_MPD = pd.concat([pd.DataFrame(GSP[1:]).assign(gsp_id=GSP[0]['gsp_id']) for GSP in message_list_list])
 
         df_MPD = df_MPD.drop(columns=['message_type'])
 
