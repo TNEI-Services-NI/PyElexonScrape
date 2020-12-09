@@ -108,8 +108,6 @@ def file_to_message_list(filename):
 
 def insert_data(message_list, p114_date):
     """
-    Generates and saves Django ORM object from message dictionary
-    in order to insert a row of BMUID-level data to DB
 
     Parameters
     ----------
