@@ -3,4 +3,4 @@
 from data_manager.data_download import run
 
 if __name__ == '__main__':
-    run(date=['2010-01-01', '2020-12-01'])
+    run(date=['2012-01-09', '2020-12-01'])

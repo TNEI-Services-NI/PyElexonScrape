@@ -145,16 +145,25 @@ def insert_data(message_list, p114_date):
         message_list_list = [message_list[idx:idx_list[_id + 1]] if _id < len(idx_list) - 1
                                                                      else message_list[idx:] for _id, idx
                                                                         in enumerate(idx_list)]
-        df_MPD = pd.concat([pd.DataFrame(GSP[1:]).assign(gsp_id=GSP[0]['gsp_id']) for GSP in message_list_list])
+        list_MPD = [
+            pd.DataFrame(GSP[1:])
+                .drop(columns=['message_type'])
+                .assign(date=p114_date.date(), sr_type=MPD['sr_type'], run_no=MPD['run_no'])
+                .pivot(index=['date', 'sr_type', 'run_no'], columns='sp')
+                .reset_index()
+                .assign(gsp=GSP[0]['gsp_id'])
+            for GSP in message_list_list]
 
-        df_MPD = df_MPD.drop(columns=['message_type'])
+        df_MPD = pd.concat(list_MPD)
 
-        df_MPD['date'] = p114_date.date()
-        df_MPD['gsp_group'] = MPD['gsp_group']
-        df_MPD['sr_type'] = MPD['sr_type']
-        df_MPD['run_no'] = MPD['run_no']
+        if not os.path.isfile(P114_INPUT_DIR+"/gspdemand-{}.csv".format(MPD['gsp_group'])):
+            df_MPD.to_csv(P114_INPUT_DIR+"/gspdemand-{}.csv".format(MPD['gsp_group']),
+                                          mode='a', header=True, index=False)
+        else:
+            df_MPD.to_csv(P114_INPUT_DIR+"/gspdemand-{}.csv".format(MPD['gsp_group']),
+                                          mode='a', header=False, index=False)
 
-        df_MPD.to_csv(P114_INPUT_DIR+"/gsp_demand.csv", mode='a+')
+
 
 def process_p114_date(p114_date):
     """
