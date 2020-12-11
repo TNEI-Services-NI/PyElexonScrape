@@ -155,13 +155,13 @@ def insert_data(message_list, p114_date, pool = []):
                              else message_list[idx:] for _id, idx
                              in enumerate(idx_list)]
 
-        df_MPD = pd.concat([pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
-                                                                                      sr_type=MPD['sr_type'],
-                                                                                      run_no=MPD['run_no'],
-                                                                                      gsp=m[0]['gsp_id'],
-                                                                                      group=MPD[
-                                                                                          'gsp_group']).pivot_table(
-            index=['group', 'gsp', 'sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list])
+        # By GSP and YEAR ONLY
+        dict_MPD = {m[0]['gsp_id']:pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+                                                                             sr_type=MPD['sr_type'],
+                                                                             run_no=MPD['run_no'],
+                                                                             group=MPD[
+                                                                                 'gsp_group']).pivot_table(
+            index=['group', 'sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
 
         if type(pool) == list:
             foldername = P114_INPUT_DIR
@@ -171,13 +171,39 @@ def insert_data(message_list, p114_date, pool = []):
         if not os.path.exists(foldername):
             os.makedirs(foldername)
 
-        filedir = foldername + 'gspdemand-{}.csv'.format(p114_date.date())
+        for gsp, df_MPD in dict_MPD.items():
+            filedir = foldername + 'gspdemand-{}-{}.csv'.format(gsp, p114_date.year)
 
-        if not os.path.isfile(filedir):
-            df_MPD.to_csv(filedir, mode='a', header=True)
-        else:
-            df_MPD.to_csv(filedir, mode='a', header=False)
+            if not os.path.isfile(filedir):
+                df_MPD.to_csv(filedir, mode='a', header=True)
+            else:
+                df_MPD.to_csv(filedir, mode='a', header=False)
 
+        # By YEAR ONLY
+        # df_MPD = pd.concat([pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+        #                                                                               sr_type=MPD['sr_type'],
+        #                                                                               run_no=MPD['run_no'],
+        #                                                                               gsp=m[0]['gsp_id'],
+        #                                                                               group=MPD[
+        #                                                                                   'gsp_group']).pivot_table(
+        #     index=['group', 'gsp', 'sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list])
+        #
+        # if type(pool) == list:
+        #     foldername = P114_INPUT_DIR
+        # elif type(pool) == int:
+        #     foldername = P114_INPUT_DIR + "{}/".format(pool)
+        #
+        # if not os.path.exists(foldername):
+        #     os.makedirs(foldername)
+        #
+        # filedir = foldername + 'gspdemand-{}.csv'.format(p114_date.year)
+        #
+        # if not os.path.isfile(filedir):
+        #     df_MPD.to_csv(filedir, mode='a', header=True)
+        # else:
+        #     df_MPD.to_csv(filedir, mode='a', header=False)
+
+        # By GROUP ONLY
         # list_MPD = [
         #     pd.DataFrame(GSP[1:])
         #         .drop(columns=['message_type'])
@@ -265,22 +291,24 @@ def combine_data(q: mp.Queue, status_q: mp.Queue, pool : int):
             os.remove(P114_INPUT_DIR + filename)
         else:
             count += 1
-
-        if count > 100:
+        # print("Running {}".format(pool))
+        if count > 10:
             files = list(filter(lambda f: '.gz' in f, os.listdir(P114_INPUT_DIR)))
             if len(files) == 0:
-                status_q.get()
+                break
 
-def pull_data_parallel(date, end_date, t0, q, status_q):
+
+def pull_data_parallel(start_date, end_date, t0, q, status_q):
     completed_requests = 0
+    date = start_date
     status_q.put(1)
-    while date <= end_date:
+    while (date >= start_date) if reverse else (date <= end_date):
         if ((dt.datetime.now() - t0).seconds / 60) - (request_interval_mins * completed_requests) > 0:
             print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
             print("downloading data for " + '{:%Y-%m-%d}'.format(date))
             pull_p114_date_files_parallel(date, q)
-            date += dt.timedelta(days=1)
-            completed_requests += 1
+            date += dt.timedelta(days=-1 if reverse else 1)
+            completed_requests += -1 if reverse else 1
     pop = status_q.get()
 
 
@@ -295,6 +323,26 @@ def pull_data(date, end_date, t0):
             completed_requests += 1
 
 
+def merge_data():
+    pool_folders = list(filter(lambda x: '.gitkeep' not in x, os.listdir(P114_INPUT_DIR)))
+
+    gsp_func = lambda x: [y.split('-')[1] for y in x]
+    pool_folders_files = [os.listdir(P114_INPUT_DIR + '/{}'.format(pool_folder)) for pool_folder in pool_folders]
+
+    pool_folder_gsps = [gsp_func(pool_folder_files) for pool_folder_files in pool_folders_files]
+
+    gsps = list(set(reduce(lambda l, r: list(set(l+r)), pool_folder_gsps)))
+
+    list_data = [[pd.read_csv('{}/{}/{}'.format(P114_INPUT_DIR, pool_folder, year_file),
+                              header=[0, 1],
+                              index_col=[0, 1, 2, 3, 4])
+                          for pool_folder in pool_folders]
+                         for gsp in gsps[0:10]]
+    # [pd.concat(year_data) for year_data in list_data]
+
+    print
+
+
 def run_parallel(*args, **options):
     """downloads P114 data for specific date range,
     expected 2 arguments of form ['yyyy-mm-dd', 'yyyy-mm-dd']"""
@@ -307,6 +355,12 @@ def run_parallel(*args, **options):
                    pool in range(pull_pools)]
     end_dates = [start_date_ + dt.timedelta(days=-1) for start_date_ in start_dates[1:]] + [end_date]
 
+    if reverse:
+        temp = end_dates
+        end_dates = start_dates
+        start_dates = temp
+        del temp
+
     dates = list(zip(start_dates, end_dates))
 
     t0 = dt.datetime.now()
@@ -315,9 +369,7 @@ def run_parallel(*args, **options):
     status_q = mp.Queue()
 
     if pull_pools == 0:
-        files = list(filter(lambda f: '.gz' in  f, os.listdir(P114_INPUT_DIR)))
-        # split_files = np.array_split(np.array(files), MAX_POOLS-pull_pools)
-        # [[q.put(file) for file in list_files] for list_files in  split_files]
+        files = list(filter(lambda f: '.gz' in f, os.listdir(P114_INPUT_DIR)))
 
         [q.put(
             {'filename': file, 'p114_date': dt.datetime.strptime(files[0].split('.')[0].split('_')[-1][:-6], '%Y%m%d')})
@@ -336,6 +388,9 @@ def run_parallel(*args, **options):
         p.join()
 
 
+    merge_data()
+
+
 def run(*args, **options):
     """downloads P114 data for specific date range,
     expected 2 arguments of form ['yyyy-mm-dd', 'yyyy-mm-dd']"""
@@ -351,5 +406,5 @@ def run(*args, **options):
             print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
             print("downloading data for " + '{:%Y-%m-%d}'.format(date))
             pull_p114_date_files(date)
-            date += dt.timedelta(days=1)
-            completed_requests += 1
+            date += dt.timedelta(days=-1 if reverse else 1)
+            completed_requests += -1 if reverse else 1
