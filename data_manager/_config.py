@@ -10,7 +10,11 @@ P114_INPUT_DIR = r'E:\data_manager\data\\'
 P114_INPUT_DIR = r'C:\Users\Workstation4\Documents\Max\gb-data-pull\data_manager\data\\'
 
 ELEXON_KEY = 'nvxyve1ubai87gz'
-
 TARGET_MESSAGES = ['MPD', 'GP9', 'GMP']
 
+MAX_POOLS = 8
+
 request_interval_mins = 0
+
+pull_pools = 0
+

@@ -10,6 +10,7 @@ import datetime as dt
 import pandas as pd
 from functools import reduce
 import multiprocessing as mp
+import numpy as np
 
 
 def get_p114_filenames_for_date(p114_date):
@@ -251,8 +252,10 @@ def pull_p114_date_files_parallel(p114_date: dt.date, q: mp.Queue) -> None:
 
 
 def combine_data(q: mp.Queue, status_q: mp.Queue, pool : int):
+    count = 0
     while status_q.qsize() > 0:
         if q.qsize() > 0:
+            count = 0
             # print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
             # print('buffer size: {}'.format(status_q.qsize()))
             _file_data = q.get()
@@ -260,7 +263,13 @@ def combine_data(q: mp.Queue, status_q: mp.Queue, pool : int):
             p114_date = _file_data['p114_date']
             insert_data(file_to_message_list(filename), p114_date, pool)
             os.remove(P114_INPUT_DIR + filename)
+        else:
+            count += 1
 
+        if count > 100:
+            files = list(filter(lambda f: '.gz' in f, os.listdir(P114_INPUT_DIR)))
+            if len(files) == 0:
+                status_q.get()
 
 def pull_data_parallel(date, end_date, t0, q, status_q):
     completed_requests = 0
@@ -294,19 +303,30 @@ def run_parallel(*args, **options):
     start_date = dt.datetime(*[int(x) for x in options['date'][0].split('-')[:3]])
     end_date = dt.datetime(*[int(x) for x in options['date'][1].split('-')[:3]])
 
-    start_date_1 = start_date
-    end_date_1 = start_date + (end_date - start_date) / 2 + dt.timedelta(days=-1)
-    start_date_2 = start_date_1 + (end_date - start_date) / 2
-    end_date_2 = end_date
+    start_dates = [dt.datetime(*(start_date + pool * ((end_date - start_date) / pull_pools)).date().timetuple()[:3]) for
+                   pool in range(pull_pools)]
+    end_dates = [start_date_ + dt.timedelta(days=-1) for start_date_ in start_dates[1:]] + [end_date]
+
+    dates = list(zip(start_dates, end_dates))
 
     t0 = dt.datetime.now()
 
     q = mp.Queue()
     status_q = mp.Queue()
 
-    workers = [mp.Process(target=pull_data_parallel, args=(start_date_1, end_date_1, t0, q, status_q,)),
-               mp.Process(target=pull_data_parallel, args=(start_date_2, end_date_2, t0, q, status_q,))] + \
-                [mp.Process(target=combine_data, args=(q, status_q,pool,)) for pool in range(1,7)]
+    if pull_pools == 0:
+        files = list(filter(lambda f: '.gz' in  f, os.listdir(P114_INPUT_DIR)))
+        # split_files = np.array_split(np.array(files), MAX_POOLS-pull_pools)
+        # [[q.put(file) for file in list_files] for list_files in  split_files]
+
+        [q.put(
+            {'filename': file, 'p114_date': dt.datetime.strptime(files[0].split('.')[0].split('_')[-1][:-6], '%Y%m%d')})
+         for file in files]
+        status_q.put(1)
+
+    workers = [mp.Process(target=pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
+               for date_ in dates] + \
+                [mp.Process(target=combine_data, args=(q, status_q,pool,)) for pool in range(1,MAX_POOLS-pull_pools+1)]
 
     # Execute workers
     for p in workers:
