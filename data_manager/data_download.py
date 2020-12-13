@@ -333,14 +333,19 @@ def merge_data():
 
     gsps = list(set(reduce(lambda l, r: list(set(l+r)), pool_folder_gsps)))
 
-    list_data = [[pd.read_csv('{}/{}/{}'.format(P114_INPUT_DIR, pool_folder, year_file),
-                              header=[0, 1],
-                              index_col=[0, 1, 2, 3, 4])
-                          for pool_folder in pool_folders]
-                         for gsp in gsps[0:10]]
-    # [pd.concat(year_data) for year_data in list_data]
+    List_pool_gsp_files = [
+        [[pd.read_csv(P114_INPUT_DIR+'/{}/{}'.format(pool_folder, filename), header=[0,1], index_col=[0,1,2,3])
+          for filename in os.listdir(P114_INPUT_DIR + "/{}".format(pool_folder)) if gsp in filename] for gsp in
+         gsps
+         ] for pool_folder in pool_folders]
 
-    print
+    dict_gsp_dfs = {gsp: pd.concat([pd.concat(
+        [pd.read_csv(P114_INPUT_DIR + '/{}/{}'.format(pool_folder, filename), header=[0, 1], index_col=[0, 1, 2, 3])
+         for filename in os.listdir(P114_INPUT_DIR + "/{}".format(pool_folder)) if gsp in filename]) for pool_folder in
+           pool_folders]) for gsp in gsps}
+
+    for gsp, df_gsp in dict_gsp_dfs.items():
+        df_gsp.to_csv(P114_INPUT_DIR+"/gspdemand-{}.csv".format(gsp))
 
 
 def run_parallel(*args, **options):

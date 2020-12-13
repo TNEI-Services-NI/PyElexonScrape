@@ -132,3 +132,6 @@ FIELD_CASTING_FUNCS = {
     'tstaov': lambda x: float(x),
     'vol' : lambda x: float(x),
 }
+
+
+sr_type_map = ['DF', 'RF', 'R3', 'R2', 'R1', 'SF', 'II', 'SD']
