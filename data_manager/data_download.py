@@ -10,6 +10,7 @@ import datetime as dt
 import pandas as pd
 from functools import reduce
 import multiprocessing as mp
+import time
 import numpy as np
 
 
@@ -169,6 +170,7 @@ def insert_data(message_list, p114_date, pool = []):
             foldername = P114_INPUT_DIR + "{}/".format(pool)
 
         if not os.path.exists(foldername):
+            print("generating dir")
             os.makedirs(foldername)
 
         for gsp, df_MPD in dict_MPD.items():
@@ -277,31 +279,27 @@ def pull_p114_date_files_parallel(p114_date: dt.date, q: mp.Queue) -> None:
         print('No relevant files found')
 
 
-def combine_data(q: mp.Queue, status_q: mp.Queue, pool : int):
-    count = 0
-    while status_q.qsize() > 0:
-        if q.qsize() > 0:
-            count = 0
-            # print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
-            # print('buffer size: {}'.format(status_q.qsize()))
+def combine_data(q: mp.Queue, pool : int):
+    time.sleep(600)
+    t0 = dt.datetime.now()
+    for i in range(200):
+        while q.qsize() > 0:
+            t1 = dt.datetime.now()
+            if (t1-t0).seconds > 10:
+                print('Running combine pool {}'.format(pool))
+                t0 = dt.datetime.now()
             _file_data = q.get()
             filename = _file_data['filename']
             p114_date = _file_data['p114_date']
             insert_data(file_to_message_list(filename), p114_date, pool)
             os.remove(P114_INPUT_DIR + filename)
-        else:
-            count += 1
-        # print("Running {}".format(pool))
-        if count > 10:
-            files = list(filter(lambda f: '.gz' in f, os.listdir(P114_INPUT_DIR)))
-            if len(files) == 0:
-                break
+        print("Pool queue empty {}".format(pool))
+        time.sleep(180)
 
 
 def pull_data_parallel(start_date, end_date, t0, q, status_q):
     completed_requests = 0
     date = start_date
-    status_q.put(1)
     while (date >= start_date) if reverse else (date <= end_date):
         if ((dt.datetime.now() - t0).seconds / 60) - (request_interval_mins * completed_requests) > 0:
             print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
@@ -309,7 +307,7 @@ def pull_data_parallel(start_date, end_date, t0, q, status_q):
             pull_p114_date_files_parallel(date, q)
             date += dt.timedelta(days=-1 if reverse else 1)
             completed_requests += -1 if reverse else 1
-    pop = status_q.get()
+    return 0
 
 
 def pull_data(date, end_date, t0):
@@ -333,12 +331,6 @@ def merge_data():
 
     gsps = list(set(reduce(lambda l, r: list(set(l+r)), pool_folder_gsps)))
 
-    List_pool_gsp_files = [
-        [[pd.read_csv(P114_INPUT_DIR+'/{}/{}'.format(pool_folder, filename), header=[0,1], index_col=[0,1,2,3])
-          for filename in os.listdir(P114_INPUT_DIR + "/{}".format(pool_folder)) if gsp in filename] for gsp in
-         gsps
-         ] for pool_folder in pool_folders]
-
     dict_gsp_dfs = {gsp: pd.concat([pd.concat(
         [pd.read_csv(P114_INPUT_DIR + '/{}/{}'.format(pool_folder, filename), header=[0, 1], index_col=[0, 1, 2, 3])
          for filename in os.listdir(P114_INPUT_DIR + "/{}".format(pool_folder)) if gsp in filename]) for pool_folder in
@@ -353,6 +345,10 @@ def run_parallel(*args, **options):
     expected 2 arguments of form ['yyyy-mm-dd', 'yyyy-mm-dd']"""
     if os.path.isfile(P114_INPUT_DIR + "gsp_demand.csv"):
         os.remove(P114_INPUT_DIR + "gsp_demand.csv")
+
+    if not os.path.exists(P114_INPUT_DIR):
+        os.makedirs(P114_INPUT_DIR)
+
     start_date = dt.datetime(*[int(x) for x in options['date'][0].split('-')[:3]])
     end_date = dt.datetime(*[int(x) for x in options['date'][1].split('-')[:3]])
 
@@ -379,11 +375,10 @@ def run_parallel(*args, **options):
         [q.put(
             {'filename': file, 'p114_date': dt.datetime.strptime(files[0].split('.')[0].split('_')[-1][:-6], '%Y%m%d')})
          for file in files]
-        status_q.put(1)
 
     workers = [mp.Process(target=pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
                for date_ in dates] + \
-                [mp.Process(target=combine_data, args=(q, status_q,pool,)) for pool in range(1,MAX_POOLS-pull_pools+1)]
+                [mp.Process(target=combine_data, args=(q,pool,)) for pool in range(1,MAX_POOLS-pull_pools+1)]
 
     # Execute workers
     for p in workers:
@@ -391,7 +386,6 @@ def run_parallel(*args, **options):
     # Add worker to queue and wait until finished
     for p in workers:
         p.join()
-
 
     merge_data()
 
