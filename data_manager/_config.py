@@ -12,11 +12,11 @@ P114_INPUT_DIR = BASE_DIR+r"/data_manager/data_/"
 ELEXON_KEY = 'nvxyve1ubai87gz'
 TARGET_MESSAGES = ['MPD', 'GP9', 'GMP']
 
-MAX_POOLS = 4
+MAX_POOLS = 8
 
 request_interval_mins = 0
 
-pull_pools = 1
+pull_pools = 0
 
-reverse = True
+reverse = False
 

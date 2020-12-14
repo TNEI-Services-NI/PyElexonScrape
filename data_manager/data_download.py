@@ -12,6 +12,7 @@ from functools import reduce
 import multiprocessing as mp
 import time
 import numpy as np
+import shutil
 
 
 def get_p114_filenames_for_date(p114_date):
@@ -280,9 +281,9 @@ def pull_p114_date_files_parallel(p114_date: dt.date, q: mp.Queue) -> None:
 
 
 def combine_data(q: mp.Queue, pool : int):
-    time.sleep(600)
+    time.sleep(10)
     t0 = dt.datetime.now()
-    for i in range(200):
+    for i in range(20):
         while q.qsize() > 0:
             t1 = dt.datetime.now()
             if (t1-t0).seconds > 10:
@@ -292,7 +293,10 @@ def combine_data(q: mp.Queue, pool : int):
             filename = _file_data['filename']
             p114_date = _file_data['p114_date']
             insert_data(file_to_message_list(filename), p114_date, pool)
-            os.remove(P114_INPUT_DIR + filename)
+            # os.remove(P114_INPUT_DIR + filename)
+            if not os.path.exists(P114_INPUT_DIR + "/done"):
+                os.makedirs(P114_INPUT_DIR + "/done")
+            shutil.move(P114_INPUT_DIR + filename, P114_INPUT_DIR + "/done/" + filename)
         print("Pool queue empty {}".format(pool))
         time.sleep(180)
 
