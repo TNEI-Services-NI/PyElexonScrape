@@ -3,16 +3,16 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # P114 downloads
-P114_LIST_URL = r'https://downloads.elexonportal.co.uk/p114/list?key={}&date={}&filter=C0301'
+P114_LIST_URL = r'https://downloads.elexonportal.co.uk/p114/list?key={}&date={}'
 P114_DOWNLOAD_URL = r'https://downloads.elexonportal.co.uk/p114/download?key={}&filename={}'
 
 P114_INPUT_DIR = r'E:\data_manager\data\\'
-P114_INPUT_DIR = BASE_DIR+r"/data_manager/data_/"
+P114_INPUT_DIR = BASE_DIR+r"/data_manager/data_/gz/"
 
 ELEXON_KEY = 'nvxyve1ubai87gz'
-TARGET_MESSAGES = ['MPD', 'GP9', 'GMP']
+TARGET_MESSAGES = ['AGV', 'AGP', 'MPD', 'GP9', 'GMP']
 
-MAX_POOLS = 8
+MAX_POOLS = 1
 
 request_interval_mins = 0
 

@@ -97,7 +97,7 @@ def file_to_message_list(filename):
     file = gzip.open(P114_INPUT_DIR + filename, 'rb')
     file_content = file.read().decode('utf-8', 'ignore')
 
-    target_present = reduce(lambda l, r: l and r, [id_ in file_content for id_ in TARGET_MESSAGES])
+    target_present = reduce(lambda l, r: l or r, [id_ in file_content for id_ in TARGET_MESSAGES])
 
     if target_present:
 
@@ -116,7 +116,7 @@ def file_to_message_list(filename):
                 elif message_type not in IGNORED_MESSAGES[p114_feed]:
                     print(row)
                     raise ValueError('message type {} not recognised'.format(message_type))
-        message_list = list(filter(lambda x: x['message_type'] in ['MPD', 'GP9', 'GMP'], message_list))
+        message_list = list(filter(lambda x: x['message_type'] in TARGET_MESSAGES, message_list))
         return message_list
     else:
         return []
@@ -147,40 +147,72 @@ def insert_data(message_list, p114_date, pool = []):
     df_gsp = pd.DataFrame({})
 
     if len(message_list) > 0:
-        MPD = message_list[0]
+        if message_list[0]['message_type'] =='MPD':
+            MPD = message_list[0]
 
-        message_list = message_list[1:]
+            message_list = message_list[1:]
 
-        idx_list = [idx for idx, x in enumerate(message_list) if x['message_type'] == 'GP9']
+            idx_list = [idx for idx, x in enumerate(message_list) if x['message_type'] == 'GP9']
 
-        message_list_list = [message_list[idx:idx_list[_id + 1]] if _id < len(idx_list) - 1
-                             else message_list[idx:] for _id, idx
-                             in enumerate(idx_list)]
+            message_list_list = [message_list[idx:idx_list[_id + 1]] if _id < len(idx_list) - 1
+                                 else message_list[idx:] for _id, idx
+                                 in enumerate(idx_list)]
 
-        # By GSP and YEAR ONLY
-        dict_MPD = {m[0]['gsp_id']:pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
-                                                                             sr_type=MPD['sr_type'],
-                                                                             run_no=MPD['run_no'],
-                                                                             group=MPD[
-                                                                                 'gsp_group']).pivot_table(
-            index=['group', 'sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
+            # By GSP and YEAR ONLY
+            dict_MPD = {m[0]['gsp_id']:pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+                                                                                 sr_type=MPD['sr_type'],
+                                                                                 run_no=MPD['run_no'],
+                                                                                 group=MPD[
+                                                                                     'gsp_group']).pivot_table(
+                index=['group', 'sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
 
-        if type(pool) == list:
-            foldername = P114_INPUT_DIR
-        elif type(pool) == int:
-            foldername = P114_INPUT_DIR + "{}/".format(pool)
+            if type(pool) == list:
+                foldername = P114_INPUT_DIR.replace('gz/', '')
+            elif type(pool) == int:
+                foldername = P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool)
 
-        if not os.path.exists(foldername):
-            print("generating dir")
-            os.makedirs(foldername)
+            if not os.path.exists(foldername):
+                print("generating dir")
+                os.makedirs(foldername)
 
-        for gsp, df_MPD in dict_MPD.items():
-            filedir = foldername + 'gspdemand-{}-{}.csv'.format(gsp, p114_date.year)
+            for gsp, df_MPD in dict_MPD.items():
+                filedir = foldername + 'gspdemand-{}-{}.csv'.format(gsp, p114_date.year)
 
-            if not os.path.isfile(filedir):
-                df_MPD.to_csv(filedir, mode='a', header=True)
-            else:
-                df_MPD.to_csv(filedir, mode='a', header=False)
+                if not os.path.isfile(filedir):
+                    df_MPD.to_csv(filedir, mode='a', header=True)
+                else:
+                    df_MPD.to_csv(filedir, mode='a', header=False)
+        elif message_list[0]['message_type'] =='AGV':
+            idx_list = [idx for idx, x in enumerate(message_list) if x['message_type'] == 'AGV']
+
+            message_list_list = [message_list[idx:idx_list[_id + 1]] if _id < len(idx_list) - 1
+                                 else message_list[idx:] for _id, idx
+                                 in enumerate(idx_list)]
+
+            # By GSP and YEAR ONLY
+            dict_AGV = {m[0]['gsp_group']: pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+                                                                                                  sr_type=m[0][
+                                                                                                      'sr_type'],
+                                                                                                  run_no=m[0]['run_no']
+                                                                                                     ).pivot_table(
+                index=['sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
+
+            if type(pool) == list:
+                foldername = P114_INPUT_DIR.replace('gz/', '')
+            elif type(pool) == int:
+                foldername = P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool)
+
+            if not os.path.exists(foldername):
+                print("generating dir")
+                os.makedirs(foldername)
+
+            for gsp_group, df_AGV in dict_AGV.items():
+                filedir = foldername + 'agggspdemand-{}-{}.csv'.format(gsp_group, p114_date.year)
+
+                if not os.path.isfile(filedir):
+                    df_AGV.to_csv(filedir, mode='a', header=True)
+                else:
+                    df_AGV.to_csv(filedir, mode='a', header=False)
 
         # By YEAR ONLY
         # df_MPD = pd.concat([pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
@@ -283,6 +315,7 @@ def pull_p114_date_files_parallel(p114_date: dt.date, q: mp.Queue) -> None:
 def combine_data(q: mp.Queue, pool : int):
     time.sleep(10)
     t0 = dt.datetime.now()
+    print('Running combine pool {}'.format(pool))
     for i in range(20):
         while q.qsize() > 0:
             t1 = dt.datetime.now()
@@ -375,10 +408,22 @@ def run_parallel(*args, **options):
 
     if pull_pools == 0:
         files = list(filter(lambda f: '.gz' in f, os.listdir(P114_INPUT_DIR)))
+        file_dates = [dt.datetime.strptime(filename.split('_')[1], '%Y%m%d') for filename in files]
+        file_dates = list(zip(files, file_dates))
+        file_dates = list(filter(lambda x: (x[1] >= start_date)&(x[1] <= end_date), file_dates))
+        file_dates = list(filter(lambda x: ('C0291' in x[0])|('C0301' in x[0]), file_dates))
+        file_dates = list(sorted(file_dates))
+        target_files = list(map(lambda x: x[0], file_dates))
+        non_target_files = list(set(files)-set(target_files))
+        for non_target_file in non_target_files:
+            if not os.path.exists(P114_INPUT_DIR+'/non_target/'):
+                os.makedirs(P114_INPUT_DIR+'/non_target/')
+            shutil.move(P114_INPUT_DIR+'/{}'.format(non_target_file),
+                        P114_INPUT_DIR+'/non_target/{}'.format(non_target_file))
 
         [q.put(
-            {'filename': file, 'p114_date': dt.datetime.strptime(files[0].split('.')[0].split('_')[-1][:-6], '%Y%m%d')})
-         for file in files]
+            {'filename': file_date[0], 'p114_date': file_date[1]})
+         for file_date in file_dates]
 
     workers = [mp.Process(target=pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
                for date_ in dates] + \
