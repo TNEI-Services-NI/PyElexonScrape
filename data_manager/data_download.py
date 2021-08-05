@@ -15,81 +15,13 @@ import data_manager.B1610.util as B1610_util
 
 
 def run_demand_parallel(*args, **options):
-    # """downloads P114 data for specific date range,
-    # expected 2 arguments of form ['yyyy-mm-dd', 'yyyy-mm-dd']"""
-    # if os.path.isfile(cf.P114_INPUT_DIR + "gsp_demand.csv"):
-    #     os.remove(cf.P114_INPUT_DIR + "gsp_demand.csv")
-    #
-    # if not os.path.exists(cf.P114_INPUT_DIR):
-    #     os.makedirs(cf.P114_INPUT_DIR)
-    #
-    # start_date = dt.datetime(*[int(x) for x in options['date'][0].split('-')[:3]])
-    # end_date = dt.datetime(*[int(x) for x in options['date'][1].split('-')[:3]])
-    #
-    # start_dates = [dt.datetime(*(start_date + pool * ((end_date - start_date) / cf.pull_pools)).date().timetuple()[:3])
-    #                for
-    #                pool in range(cf.pull_pools)]
-    # end_dates = [start_date_ + dt.timedelta(days=-1) for start_date_ in start_dates[1:]] + [end_date]
-    #
-    # if cf.reverse:
-    #     temp = end_dates
-    #     end_dates = start_dates
-    #     start_dates = temp
-    #     del temp
-    #
-    # dates = list(zip(start_dates, end_dates))
-    #
-    # t0 = dt.datetime.now()
-    #
-    # q = mp.Queue()
-    # status_q = mp.Queue()
-    #
-    # if cf.pull_pools == 0:
-    #     files = list(filter(lambda f: '.gz' in f, os.listdir(cf.P114_INPUT_DIR)))
-    #     file_dates = [dt.datetime.strptime(filename.split('_')[1], '%Y%m%d') for filename in files]
-    #     file_dates = list(zip(files, file_dates))
-    #     file_dates = list(filter(lambda x: (x[1] >= start_date) & (x[1] <= end_date), file_dates))
-    #     file_dates = list(filter(lambda x: ('C0291' in x[0]) | ('C0301' in x[0]), file_dates))
-    #     file_dates = list(sorted(file_dates))
-    #     target_files = list(map(lambda x: x[0], file_dates))
-    #     non_target_files = list(set(files) - set(target_files))
-    #     for non_target_file in non_target_files:
-    #         if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/non_target/")):
-    #             os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/non_target/"))
-    #         shutil.move(cf.P114_INPUT_DIR + '/{}'.format(non_target_file),
-    #                     cf.P114_INPUT_DIR.replace('/gz/', "/non_target/") + '{}'.format(non_target_file))
-    #
-    #     [q.put(
-    #         {'filename': file_date[0], 'p114_date': file_date[1]})
-    #         for file_date in file_dates]
-    #
-    # # workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
-    # #            for date_ in dates] + \
-    # #           [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in
-    # #            range(1, cf.MAX_POOLS - cf.pull_pools + 1)]
-    #
-    # workers = [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in
-    #            range(0, cf.MAX_POOLS)]
-    #
-    # # Execute workers
-    # for p in workers:
-    #     p.start()
-    # # Add worker to queue and wait until finished
-    # for p in workers:
-    #     p.join()
-
-    # p114_util.fix_DST_days()
-    p114_util.merge_data()
-
-
-def run_generation_parallel(*args, **options):
     """downloads P114 data for specific date range,
     expected 2 arguments of form ['yyyy-mm-dd', 'yyyy-mm-dd']"""
-    if os.path.isfile(cf.B1610_INPUT_DIR + "gsp_generation.csv"):
-        os.remove(cf.B1610_INPUT_DIR + "gsp_generation.csv")
+    if os.path.isfile(cf.P114_INPUT_DIR + "gsp_demand.csv"):
+        os.remove(cf.P114_INPUT_DIR + "gsp_demand.csv")
 
-    if not os.path.exists(cf.B1610_INPUT_DIR):
-        os.makedirs(cf.B1610_INPUT_DIR)
+    if not os.path.exists(cf.P114_INPUT_DIR):
+        os.makedirs(cf.P114_INPUT_DIR)
 
     start_date = dt.datetime(*[int(x) for x in options['date'][0].split('-')[:3]])
     end_date = dt.datetime(*[int(x) for x in options['date'][1].split('-')[:3]])
@@ -122,24 +54,27 @@ def run_generation_parallel(*args, **options):
         target_files = list(map(lambda x: x[0], file_dates))
         non_target_files = list(set(files) - set(target_files))
         for non_target_file in non_target_files:
-            if not os.path.exists(cf.P114_INPUT_DIR + '/non_target/'):
-                os.makedirs(cf.P114_INPUT_DIR + '/non_target/')
+            if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/non_target/")):
+                os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/non_target/"))
             shutil.move(cf.P114_INPUT_DIR + '/{}'.format(non_target_file),
-                        cf.P114_INPUT_DIR + '/non_target/{}'.format(non_target_file))
+                        cf.P114_INPUT_DIR.replace('/gz/', "/non_target/") + '{}'.format(non_target_file))
 
         [q.put(
             {'filename': file_date[0], 'p114_date': file_date[1]})
             for file_date in file_dates]
 
-    # workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
-    #            for date_ in dates] + \
-    #           [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in
-    #            range(1, cf.MAX_POOLS - cf.pull_pools + 1)]
-
     workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
-               for date_ in dates] + \
-              [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in
-               range(1, cf.MAX_POOLS - cf.pull_pools + 1)]
+               for date_ in dates]
+
+    # Execute workers
+    for p in workers:
+        p.start()
+    # Add worker to queue and wait until finished
+    for p in workers:
+        p.join()
+
+    workers = [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in
+               range(0, cf.MAX_POOLS)]
 
     # Execute workers
     for p in workers:
@@ -209,7 +144,7 @@ def run(*args, **options):
                 if options['type'] == 'demand':
                     run_demand_parallel(**options)
                 elif options['type'] == 'generation':
-                    run_generation_parallel(**options)
+                    run_generation(*args, **options)
         else:
             if 'type' in options.keys():
                 if options['type'] == 'demand':
