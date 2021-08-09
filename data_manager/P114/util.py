@@ -203,7 +203,7 @@ def combine_data(q: mp.Queue, pool : int):
 
 
 
-def insert_data(message_list, filename, pool = []):
+def insert_data(message_list, filename, pool = [], target=None):
     """
 
     Parameters
@@ -227,11 +227,11 @@ def insert_data(message_list, filename, pool = []):
     df_all = pd.DataFrame({})
     df_gsp = pd.DataFrame({})
 
-    columns = pd.MultiIndex.from_arrays([['ei' for x in range(1,51)]+['ii' for x in range(1,51)]+['vol' for x in range(1,51)], [x for x in range(1,51)]+[x for x in range(1,51)]+[x for x in range(1,51)]], names=[None, 'sp']).values
+    columns = pd.MultiIndex.from_arrays([['ei' for x in range(1,51)]+['ii' for x in range(1,51)]+['vol' for x in range(1,51)], [x for x in range(1,51)]+[x for x in range(1,51)]+[x for x in range(1,51)]], names=[None, 'sp'])
     p114_date = datetime.datetime.strptime(filename.split('_')[1], '%Y%m%d')
 
     if len(message_list) > 0:
-        if message_list[0]['message_type'] =='MPD':
+        if message_list[0]['message_type'] =='MPD' and (target is None or target == 'MPD'):
             MPD = message_list[0]
 
             message_list = message_list[1:]
@@ -266,7 +266,7 @@ def insert_data(message_list, filename, pool = []):
                     df_MPD.to_csv(filedir, mode='a', header=True)
                 else:
                     df_MPD.to_csv(filedir, mode='a', header=False)
-        elif message_list[0]['message_type'] =='AGV':
+        elif message_list[0]['message_type'] =='AGV' and (target is None or target == 'AGV'):
             idx_list = [idx for idx, x in enumerate(message_list) if x['message_type'] == 'AGV']
 
             message_list_list = [message_list[idx:idx_list[_id + 1]] if _id < len(idx_list) - 1
@@ -292,6 +292,40 @@ def insert_data(message_list, filename, pool = []):
 
             for gsp_group, df_AGV in dict_AGV.items():
                 filedir = foldername + 'agggspdemand-{}-{}.csv'.format(gsp_group, p114_date.year)
+
+                df_AGV_ = pd.DataFrame(index=df_AGV.index, columns=columns)
+                df_AGV_.loc[:, df_AGV.columns] = df_AGV.loc[:, :]
+
+                if not os.path.isfile(filedir):
+                    df_AGV_.to_csv(filedir, mode='a', header=True)
+                else:
+                    df_AGV_.to_csv(filedir, mode='a', header=False)
+        elif message_list[0]['message_type'] =='ABV' and (target is None or target == 'ABV'):
+            idx_list = [idx for idx, x in enumerate(message_list) if x['message_type'] == 'ABV']
+
+            message_list_list = [message_list[idx:idx_list[_id + 1]] if _id < len(idx_list) - 1
+                                 else message_list[idx:] for _id, idx
+                                 in enumerate(idx_list)]
+
+            # By GSP and YEAR ONLY
+            dict_AGV = {m[0]['bmu_id']: pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+                                                                                                  sr_type=m[0][
+                                                                                                      'sr_type'],
+                                                                                                  run_no=m[0]['run_no']
+                                                                                                     ).pivot_table(
+                index=['sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
+
+            if type(pool) == list:
+                foldername = cf.P114_INPUT_DIR.replace('gz/', '')
+            elif type(pool) == int:
+                foldername = cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool)
+
+            if not os.path.exists(foldername):
+                print("generating dir")
+                os.makedirs(foldername)
+
+            for bmu_id, df_AGV in dict_AGV.items():
+                filedir = foldername + 'bmuagg-{}-{}.csv'.format(bmu_id, p114_date.year)
 
                 df_AGV_ = pd.DataFrame(index=df_AGV.index, columns=columns)
                 df_AGV_.loc[:, df_AGV.columns] = df_AGV.loc[:, :]

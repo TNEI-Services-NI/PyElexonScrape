@@ -37,7 +37,13 @@ def merge_data():
 
     data = pd.concat(data)
 
-    data.to_csv('/'.join([cf.B1610_PROCESSED_DIR, 'gsp_generation.csv']), index=False)
+    if os.path.isfile('/'.join([cf.B1610_PROCESSED_DIR, 'gsp_generation.csv'])):
+        data.to_csv('/'.join([cf.B1610_PROCESSED_DIR, 'gsp_generation.csv']), index=False, header=False, mode='a')
+    else:
+        data.to_csv('/'.join([cf.B1610_PROCESSED_DIR, 'gsp_generation.csv']), index=False)
+
+
+
 
 
 
