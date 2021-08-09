@@ -70,15 +70,15 @@ def run_demand_parallel(*args, **options):
             {'filename': file_date[0], 'p114_date': file_date[1]})
             for file_date in file_dates]
 
-    # workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
-    #            for date_ in dates]
-    #
-    # # Execute workers
-    # for p in workers:
-    #     p.start()
-    # # Add worker to queue and wait until finished
-    # for p in workers:
-    #     p.join()
+    workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
+               for date_ in dates]
+
+    # Execute workers
+    for p in workers:
+        p.start()
+    # Add worker to queue and wait until finished
+    for p in workers:
+        p.join()
 
     workers = [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in
                range(0, cf.MAX_POOLS)]
@@ -89,8 +89,8 @@ def run_demand_parallel(*args, **options):
     # Add worker to queue and wait until finished
     for p in workers:
         p.join()
-
-    p114_util.merge_data()
+    #
+    # p114_util.merge_data()
 
 
 def run_demand(*args, **options):

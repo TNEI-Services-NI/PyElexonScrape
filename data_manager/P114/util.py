@@ -184,22 +184,20 @@ def combine_data(q: mp.Queue, pool : int):
     time.sleep(10)
     t0 = dt.datetime.now()
     print('Running combine pool {}'.format(pool))
-    for i in range(20):
-        while q.qsize() > 0:
-            t1 = dt.datetime.now()
-            if (t1-t0).seconds > 10:
-                print('Running combine pool {}'.format(pool))
-                t0 = dt.datetime.now()
-            _file_data = q.get()
-            filename = _file_data['filename']
-            p114_date = _file_data['p114_date']
-            insert_data(file_to_message_list(filename), filename, pool)
-            # os.remove(cf.P114_INPUT_DIR + filename)
-            if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/done/")):
-                os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
-            shutil.move(cf.P114_INPUT_DIR + filename, cf.P114_INPUT_DIR.replace('/gz/', "/done/") + filename)
-        print("Pool queue empty {}".format(pool))
-        time.sleep(180)
+    while q.qsize() > 0:
+        t1 = dt.datetime.now()
+        if (t1-t0).seconds > 10:
+            print('Running combine pool {}'.format(pool))
+            t0 = dt.datetime.now()
+        _file_data = q.get()
+        filename = _file_data['filename']
+        p114_date = _file_data['p114_date']
+        insert_data(file_to_message_list(filename), filename, pool)
+        # os.remove(cf.P114_INPUT_DIR + filename)
+        if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/done/")):
+            os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
+        shutil.move(cf.P114_INPUT_DIR + filename, cf.P114_INPUT_DIR.replace('/gz/', "/done/") + filename)
+    print("Pool queue empty {}".format(pool))
 
 
 
