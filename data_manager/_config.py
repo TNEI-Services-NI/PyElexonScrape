@@ -22,7 +22,7 @@ MAX_POOLS = 8
 request_interval_mins = 0
 request_interval_secs = 0
 
-pull_pools = 0
+pull_pools = 4
 
 reverse = False
 

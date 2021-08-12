@@ -43,6 +43,8 @@ def run_demand_parallel(*args, **options):
 
     q = mp.Queue()
     status_q = mp.Queue()
+    if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/done/")):
+        os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
 
     if cf.pull_pools == 0:
         files = list(filter(lambda f: '.gz' in f, os.listdir(cf.P114_INPUT_DIR)))
@@ -123,7 +125,7 @@ def run_generation(*args, **options):
         print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
         print("downloading data for " + '{:%Y-%m-%d}'.format(date))
         date_string = datetime.datetime.strftime(date, '%Y-%m-%d')
-        for settlement_period in range(1, 48 + 1):
+        for settlement_period in range(1, 50 + 1):
             filename = '_'.join([date_string, str(settlement_period)]) + '.csv'
             if os.path.isfile(cf.B1610_INPUT_DIR + filename) and not 'overwrite' in options.keys():
                 continue
