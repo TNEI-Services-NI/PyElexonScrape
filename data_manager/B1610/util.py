@@ -24,7 +24,7 @@ from data_manager._data_definitions import *
 
 
 def merge_data():
-    date_settlement = list(filter(lambda x: '.gitkeep' not in x, os.listdir(cf.B1610_INPUT_DIR)))
+    date_settlement = list(filter(lambda x: ('.gitkeep' not in x), os.listdir(cf.B1610_INPUT_DIR)))
 
     data = [pd.read_csv('/'.join([cf.B1610_INPUT_DIR, f])) for f in date_settlement]
 
@@ -41,6 +41,7 @@ def merge_data():
         data.to_csv('/'.join([cf.B1610_PROCESSED_DIR, 'gsp_generation.csv']), index=False, header=False, mode='a')
     else:
         data.to_csv('/'.join([cf.B1610_PROCESSED_DIR, 'gsp_generation.csv']), index=False)
+
 
 
 

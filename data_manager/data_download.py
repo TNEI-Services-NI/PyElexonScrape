@@ -43,6 +43,8 @@ def run_demand_parallel(*args, **options):
 
     q = mp.Queue()
     status_q = mp.Queue()
+    if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/done/")):
+        os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
 
     if cf.pull_pools == 0:
         files = list(filter(lambda f: '.gz' in f, os.listdir(cf.P114_INPUT_DIR.replace('gz/','done/'))))
@@ -55,8 +57,8 @@ def run_demand_parallel(*args, **options):
         file_dates = [dt.datetime.strptime(filename.split('_')[1], '%Y%m%d') for filename in files]
         file_dates = list(zip(files, file_dates))
         file_dates = list(filter(lambda x: (x[1] >= start_date) & (x[1] <= end_date), file_dates))
-        # file_dates = list(filter(lambda x: ('C0291' in x[0]) | ('C0301' in x[0]) | ('C0421' in x[0]), file_dates))
-        file_dates = list(filter(lambda x: ('C0421' in x[0]), file_dates))
+        file_dates = list(filter(lambda x: ('C0291' in x[0]) | ('C0301' in x[0]) | ('C0421' in x[0]), file_dates))
+        # file_dates = list(filter(lambda x: ('C0421' in x[0]), file_dates))
         file_dates = list(sorted(file_dates))
         target_files = list(map(lambda x: x[0], file_dates))
         non_target_files = list(set(files) - set(target_files))
@@ -90,7 +92,7 @@ def run_demand_parallel(*args, **options):
     for p in workers:
         p.join()
     #
-    # p114_util.merge_data()
+    p114_util.merge_data()
 
 
 def run_demand(*args, **options):
@@ -130,7 +132,7 @@ def run_generation(*args, **options):
         print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
         print("downloading data for " + '{:%Y-%m-%d}'.format(date))
         date_string = datetime.datetime.strftime(date, '%Y-%m-%d')
-        for settlement_period in range(1, 48 + 1):
+        for settlement_period in range(1, 50 + 1):
             filename = '_'.join([date_string, str(settlement_period)]) + '.csv'
             if os.path.isfile(cf.B1610_INPUT_DIR + filename) and not 'overwrite' in options.keys():
                 continue
