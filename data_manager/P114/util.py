@@ -142,24 +142,50 @@ def fix_DST_days():
     print()
 
 
-
 def merge_data():
-    pool_folders = list(filter(lambda x: ('.gitkeep' not in x)&('gz' not in x)&('done' not in x)&('fixed_dst' not in x), os.listdir(cf.P114_INPUT_DIR.replace('gz/', ''))))
+    data_dir = cf.P114_INPUT_DIR.replace('gz/', '')
+
+    pool_folders = list(filter(
+        lambda x: ('.gitkeep' not in x) & ('gz' not in x) & ('done' not in x) & ('fixed_dst' not in x) & (
+                    'non_target' not in x), os.listdir(data_dir)))
+
+    pool_folder_files = {x: os.listdir('/'.join([data_dir, x])) for x in pool_folders}
+
+    files = list(set(sum(pool_folder_files.values(), [])))
+
+    for file in files:
+        pool_files = sum([[pd.read_csv('/'.join([data_dir, pool, f_]), header=[0, 1], index_col=[0, 1, 2, 3]) for f_ in f if f_ == file] for pool, f in pool_folder_files.items()], [])
+        df_data = pd.concat(pool_files)
+        df_data.to_csv('/'.join([data_dir, file]))
+    print()
+
+
+def merge_data_subsplit():
+    pool_folders = list(filter(lambda x: ('.gitkeep' not in x)&('gz' not in x)&('done' not in x)&('fixed_dst' not in x)&('non_target' not in x), os.listdir(cf.P114_INPUT_DIR.replace('gz/', ''))))
 
     gsp_func = lambda x: [y.split('-')[1] for y in x]
-    pool_folders_files_gsp = [list(filter(lambda x: 'agggsp' not in x, os.listdir(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool_folder)))) for pool_folder in pool_folders]
-    pool_folders_files_agg = [list(filter(lambda x: 'agggsp' in x, os.listdir(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool_folder)))) for pool_folder in pool_folders]
+    pool_folders_files_gsp = {pool_folder: list(filter(lambda x: ('gspdemand' in x) & ('ABV' not in x),
+                                          os.listdir(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool_folder))))
+                              for pool_folder in pool_folders}
+    pool_folders_files_agg = {pool_folder: list(filter(lambda x: ('agggsp' in x) & ('ABV' not in x),
+                                          os.listdir(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool_folder))))
+                              for pool_folder in pool_folders}
+    pool_folders_files_bmu = {pool_folder: list(filter(lambda x: ('bmu' in x) & ('ABV' not in x),
+                                          os.listdir(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool_folder))))
+                              for pool_folder in pool_folders}
 
-    pool_folder_gsps = [gsp_func(pool_folder_files) for pool_folder_files in pool_folders_files_gsp]
-    pool_folder_groups = [gsp_func(pool_folder_files) for pool_folder_files in pool_folders_files_agg]
+    pool_folder_gsps = {k: gsp_func(pool_folder_files) for k, pool_folder_files in pool_folders_files_gsp.items()}
+    pool_folder_groups = {k: gsp_func(pool_folder_files) for k, pool_folder_files in pool_folders_files_agg.items()}
+    pool_folder_bmus = {k: gsp_func(pool_folder_files) for k, pool_folder_files in pool_folders_files_bmu.items()}
 
-    gsps = list(set(reduce(lambda l, r: list(set(l+r)), pool_folder_gsps)))
-    groups = list(set(reduce(lambda l, r: list(set(l+r)), pool_folder_groups)))
+    gsps = list(set(reduce(lambda l, r: list(set(l+r)), pool_folder_gsps.values())))
+    groups = list(set(reduce(lambda l, r: list(set(l+r)), pool_folder_groups.values())))
+    bmus = list(set(reduce(lambda l, r: list(set(l+r)), pool_folder_bmus.values())))
 
     dict_gsp_dfs = {gsp: pd.concat([
         pd.concat([
-            pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/{}".format(pool_folder, filename), header=[0, 1], index_col=[0, 1, 2, 3])
-         for filename in os.listdir(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool_folder)) if (gsp in filename)&('agggspdemand' not in filename)]) for pool_folder in pool_folders])
+            pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/{}".format(pool, filename), header=[0, 1], index_col=[0, 1, 2, 3])
+         for filename in pool_files]) for pool, pool_files in pool_folders_files_gsp.items()])
         for gsp in gsps}
 
     for gsp, df_gsp in dict_gsp_dfs.items():
@@ -170,8 +196,9 @@ def merge_data():
 
     dict_gspagg_dfs = {group: pd.concat([
         pd.concat([
-            pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/{}".format(pool_folder, filename), header=[0, 1], index_col=[0, 1, 2])
-         for filename in os.listdir(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool_folder)) if (group in filename)&('agggspdemand' in filename)]) for pool_folder in pool_folders])
+            pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/{}".format(pool, filename), header=[0, 1],
+                        index_col=[0, 1, 2, 3])
+            for filename in pool_files]) for pool, pool_files in pool_folders_files_agg.items()])
         for group in groups}
     for group, df_group in dict_gspagg_dfs.items():
         df_group.to_csv(cf.P114_INPUT_DIR.replace('gz/', '')+"/agggspdemand-{}.csv".format(group))
@@ -179,31 +206,68 @@ def merge_data():
     dict_gspagg_dfs = None
     del dict_gspagg_dfs
 
+    dict_bmu_dfs = {bmu: pd.concat([
+        pd.concat([
+            pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', '') + "{}/{}".format(pool, filename), header=[0, 1],
+                        index_col=[0, 1, 2, 3])
+            for filename in pool_files]) for pool, pool_files in pool_folders_files_bmu.items()])
+        for bmu in bmus}
+    for bmu, df_bmu in dict_bmu_dfs.items():
+        df_bmu.to_csv(cf.P114_INPUT_DIR.replace('gz/', '')+"/bmu-{}.csv".format(bmu))
+
+    dict_bmu_dfs = None
+    del dict_bmu_dfs
+
 
 def combine_data(q: mp.Queue, pool : int):
     time.sleep(10)
     t0 = dt.datetime.now()
+    dict_data = None
     print('Running combine pool {}'.format(pool))
+    move_files = []
+    count = 0
+    if type(pool) == list:
+        foldername = cf.P114_INPUT_DIR.replace('gz/', '')
+    elif type(pool) == int:
+        foldername = cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool)
+    if not os.path.exists(foldername):
+        print("generating dir")
+        os.makedirs(foldername)
     for i in range(20):
         while q.qsize() > 0:
+            count += 1
             t1 = dt.datetime.now()
-            if (t1-t0).seconds > 10:
-                print('Running combine pool {}'.format(pool))
-                t0 = dt.datetime.now()
             _file_data = q.get()
             filename = _file_data['filename']
             p114_date = _file_data['p114_date']
-            insert_data(file_to_message_list(filename), filename, pool)
+            dict_data = insert_data(file_to_message_list(filename), filename, dict_data, pool)
             # os.remove(cf.P114_INPUT_DIR + filename)
             if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/done/")):
                 os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
-            shutil.move(cf.P114_INPUT_DIR + filename, cf.P114_INPUT_DIR.replace('/gz/', "/done/") + filename)
+            move_files.append((cf.P114_INPUT_DIR + filename, cf.P114_INPUT_DIR.replace('/gz/', "/done/") + filename))
+
+            if count > 100:
+                for k, v in dict_data.items():
+                    if len(v) > 0:
+                        filedir = foldername + f'{k}.csv'
+                        if os.path.isfile(filedir):
+                            v.to_csv(filedir, header=False, mode='a')
+                        else:
+                            v.to_csv(filedir)
+                dict_data = None
+
+
+                for files in move_files:
+                    shutil.move(files[0], files[1])
+
+                move_files = []
+
         print("Pool queue empty {}".format(pool))
         time.sleep(180)
 
 
 
-def insert_data(message_list, filename, pool = [], target=None):
+def insert_data(message_list, filename, dict_data = None, pool = [], target=None, return_result=True):
     """
 
     Parameters
@@ -227,7 +291,11 @@ def insert_data(message_list, filename, pool = [], target=None):
     df_all = pd.DataFrame({})
     df_gsp = pd.DataFrame({})
 
+
+
     columns = pd.MultiIndex.from_arrays([['ei' for x in range(1,51)]+['ii' for x in range(1,51)]+['vol' for x in range(1,51)], [x for x in range(1,51)]+[x for x in range(1,51)]+[x for x in range(1,51)]], names=[None, 'sp'])
+    if dict_data is None:
+        dict_data = {'MPD': pd.DataFrame(columns=columns), 'AGV': pd.DataFrame(columns=columns), 'ABV': pd.DataFrame(columns=columns)}
     p114_date = datetime.datetime.strptime(filename.split('_')[1], '%Y%m%d')
 
     if len(message_list) > 0:
@@ -243,12 +311,19 @@ def insert_data(message_list, filename, pool = [], target=None):
                                  in enumerate(idx_list)]
 
             # By GSP and YEAR ONLY
-            dict_MPD = {m[0]['gsp_id']:pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+            # dict_MPD = {m[0]['gsp_id']:pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+            #                                                                      sr_type=MPD['sr_type'],
+            #                                                                      run_no=MPD['run_no'],
+            #                                                                      group=MPD[
+            #                                                                          'gsp_group']).pivot_table(
+            #     index=['group', 'sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
+            list_MPD = {m[0]['gsp_id']:pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
                                                                                  sr_type=MPD['sr_type'],
                                                                                  run_no=MPD['run_no'],
-                                                                                 group=MPD[
-                                                                                     'gsp_group']).pivot_table(
-                index=['group', 'sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
+                                                                                 group=MPD['gsp_group'],
+                                                                                 gsp_id=m[0]['gsp_id'],
+                                                                                                 ).pivot_table(
+                index=['group', 'sr_type', 'run_no', 'date', 'gsp_id'], columns=['sp']) for m in message_list_list}
 
             if type(pool) == list:
                 foldername = cf.P114_INPUT_DIR.replace('gz/', '')
@@ -259,13 +334,23 @@ def insert_data(message_list, filename, pool = [], target=None):
                 print("generating dir")
                 os.makedirs(foldername)
 
-            for gsp, df_MPD in dict_MPD.items():
-                filedir = foldername + 'gspdemand-{}-{}.csv'.format(gsp, p114_date.year)
+            if not os.path.exists(foldername):
+                print("generating dir")
+                os.makedirs(foldername)
 
-                if not os.path.isfile(filedir):
-                    df_MPD.to_csv(filedir, mode='a', header=True)
-                else:
-                    df_MPD.to_csv(filedir, mode='a', header=False)
+            df_MPD = pd.concat(list_MPD)
+
+            if return_result:
+                dict_data['MPD'] = pd.concat([df_MPD, dict_data['MPD']])
+                return dict_data
+
+            # for gsp, df_MPD in dict_MPD.items():
+            #     filedir = foldername + 'gspdemand-{}-{}.csv'.format(gsp, p114_date.year)
+            #
+            #     if not os.path.isfile(filedir):
+            #         df_MPD.to_csv(filedir, mode='a', header=True)
+            #     else:
+            #         df_MPD.to_csv(filedir, mode='a', header=False)
         elif message_list[0]['message_type'] =='AGV' and (target is None or target == 'AGV'):
             idx_list = [idx for idx, x in enumerate(message_list) if x['message_type'] == 'AGV']
 
@@ -274,12 +359,13 @@ def insert_data(message_list, filename, pool = [], target=None):
                                  in enumerate(idx_list)]
 
             # By GSP and YEAR ONLY
-            dict_AGV = {m[0]['gsp_group']: pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+            list_AGV = [pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
                                                                                                   sr_type=m[0][
                                                                                                       'sr_type'],
-                                                                                                  run_no=m[0]['run_no']
+                                                                                                  run_no=m[0]['run_no'],
+                                                                                                  gsp_group=m[0]['gsp_group'],
                                                                                                      ).pivot_table(
-                index=['sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
+                index=['sr_type', 'run_no', 'date', 'gsp_group'], columns=['sp']) for m in message_list_list]
 
             if type(pool) == list:
                 foldername = cf.P114_INPUT_DIR.replace('gz/', '')
@@ -290,16 +376,31 @@ def insert_data(message_list, filename, pool = [], target=None):
                 print("generating dir")
                 os.makedirs(foldername)
 
-            for gsp_group, df_AGV in dict_AGV.items():
-                filedir = foldername + 'agggspdemand-{}-{}.csv'.format(gsp_group, p114_date.year)
+            if type(pool) == list:
+                foldername = cf.P114_INPUT_DIR.replace('gz/', '')
+            elif type(pool) == int:
+                foldername = cf.P114_INPUT_DIR.replace('gz/', '') + "{}/".format(pool)
 
-                df_AGV_ = pd.DataFrame(index=df_AGV.index, columns=columns)
-                df_AGV_.loc[:, df_AGV.columns] = df_AGV.loc[:, :]
+            if not os.path.exists(foldername):
+                print("generating dir")
+                os.makedirs(foldername)
 
-                if not os.path.isfile(filedir):
-                    df_AGV_.to_csv(filedir, mode='a', header=True)
-                else:
-                    df_AGV_.to_csv(filedir, mode='a', header=False)
+            df_AGV = pd.concat(list_AGV)
+
+            if return_result:
+                dict_data['AGV'] = pd.concat([df_AGV, dict_data['AGV']])
+                return dict_data
+
+            # for gsp_group, df_AGV in dict_AGV.items():
+            #     filedir = foldername + 'agggspdemand-{}-{}.csv'.format(gsp_group, p114_date.year)
+            #
+            #     df_AGV_ = pd.DataFrame(index=df_AGV.index, columns=columns)
+            #     df_AGV_.loc[:, df_AGV.columns] = df_AGV.loc[:, :]
+            #
+            #     if not os.path.isfile(filedir):
+            #         df_AGV_.to_csv(filedir, mode='a', header=True)
+            #     else:
+            #         df_AGV_.to_csv(filedir, mode='a', header=False)
         elif message_list[0]['message_type'] =='ABV' and (target is None or target == 'ABV'):
             idx_list = [idx for idx, x in enumerate(message_list) if x['message_type'] == 'ABV']
 
@@ -308,12 +409,21 @@ def insert_data(message_list, filename, pool = [], target=None):
                                  in enumerate(idx_list)]
 
             # By GSP and YEAR ONLY
-            dict_AGV = {m[0]['bmu_id']: pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+            # dict_AGV = {m[0]['bmu_id']: pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+            #                                                                                       sr_type=m[0][
+            #                                                                                           'sr_type'],
+            #                                                                                       run_no=m[0]['run_no'],
+            #                                                                                       bmu_id=m[0]['bmu_id'],
+            #                                                                                          ).pivot_table(
+            #     index=['sr_type', 'run_no', 'date', 'bmu_id'], columns=['sp']) for m in message_list_list}
+
+            list_ABV = [pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
                                                                                                   sr_type=m[0][
                                                                                                       'sr_type'],
-                                                                                                  run_no=m[0]['run_no']
-                                                                                                     ).pivot_table(
-                index=['sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
+                                                                                                  run_no=m[0]['run_no'],
+                                                                                                  bmu_id=m[0]['bmu_id'],
+                                                                                                  ).pivot_table(
+                index=['sr_type', 'run_no', 'date', 'bmu_id'], columns=['sp']) for m in message_list_list]
 
             if type(pool) == list:
                 foldername = cf.P114_INPUT_DIR.replace('gz/', '')
@@ -324,16 +434,22 @@ def insert_data(message_list, filename, pool = [], target=None):
                 print("generating dir")
                 os.makedirs(foldername)
 
-            for bmu_id, df_AGV in dict_AGV.items():
-                filedir = foldername + 'bmuagg-{}-{}.csv'.format(bmu_id, p114_date.year)
+            df_ABV = pd.concat(list_ABV)
 
-                df_AGV_ = pd.DataFrame(index=df_AGV.index, columns=columns)
-                df_AGV_.loc[:, df_AGV.columns] = df_AGV.loc[:, :]
+            if return_result:
+                dict_data['ABV'] = pd.concat([df_ABV, dict_data['ABV']])
+                return dict_data
 
-                if not os.path.isfile(filedir):
-                    df_AGV_.to_csv(filedir, mode='a', header=True)
-                else:
-                    df_AGV_.to_csv(filedir, mode='a', header=False)
+            # for bmu_id, df_ABV in dict_ABV.items():
+            #     filedir = foldername + 'bmuagg-{}-{}.csv'.format(bmu_id, p114_date.year)
+            #
+            #     df_ABV_ = pd.DataFrame(index=df_ABV.index, columns=columns)
+            #     df_ABV_.loc[:, df_ABV.columns] = df_ABV.loc[:, :]
+            #
+            #     if not os.path.isfile(filedir):
+            #         df_ABV_.to_csv(filedir, mode='a', header=True)
+            #     else:
+            #         df_ABV_.to_csv(filedir, mode='a', header=False)
 
 
         # By YEAR ONLY
@@ -436,5 +552,10 @@ def file_to_message_list(filename):
 
 
 if __name__ == '__main__':
-    gzs = os.listdir(cf.P114_INPUT_DIR)
-    # for filename in
+    # gzs = os.listdir(cf.P114_INPUT_DIR.replace('gz/', 'non_target/'))
+    # src = cf.P114_INPUT_DIR.replace('gz/', 'non_target/')
+    # for file in gzs:
+    #     shutil.move('/'.join([src, file]), '/'.join([r'V:\Individuals Folders\Max\elexon\raw', file]))
+    gzs = os.listdir(cf.P114_INPUT_DIR.replace('gz/', '0/'))
+    dfs = [pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', f'0/{x}'), header=[0, 1], index_col=[0, 1, 2, 3]) for x in gzs]
+

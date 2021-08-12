@@ -45,18 +45,11 @@ def run_demand_parallel(*args, **options):
     status_q = mp.Queue()
 
     if cf.pull_pools == 0:
-        files = list(filter(lambda f: '.gz' in f, os.listdir(cf.P114_INPUT_DIR.replace('gz/','done/'))))
-        files = list(filter(lambda x: ('C0421' in x), files))
-        for file in files:
-            shutil.move(cf.P114_INPUT_DIR.replace('gz/','done/') + file,
-                        cf.P114_INPUT_DIR + '{}'.format(file))
-
         files = list(filter(lambda f: '.gz' in f, os.listdir(cf.P114_INPUT_DIR)))
         file_dates = [dt.datetime.strptime(filename.split('_')[1], '%Y%m%d') for filename in files]
         file_dates = list(zip(files, file_dates))
         file_dates = list(filter(lambda x: (x[1] >= start_date) & (x[1] <= end_date), file_dates))
-        # file_dates = list(filter(lambda x: ('C0291' in x[0]) | ('C0301' in x[0]) | ('C0421' in x[0]), file_dates))
-        file_dates = list(filter(lambda x: ('C0421' in x[0]), file_dates))
+        file_dates = list(filter(lambda x: ('C0291' in x[0]) | ('C0301' in x[0]) | ('C0421' in x[0]), file_dates))
         file_dates = list(sorted(file_dates))
         target_files = list(map(lambda x: x[0], file_dates))
         non_target_files = list(set(files) - set(target_files))
@@ -70,15 +63,15 @@ def run_demand_parallel(*args, **options):
             {'filename': file_date[0], 'p114_date': file_date[1]})
             for file_date in file_dates]
 
-    # workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
-    #            for date_ in dates]
-    #
-    # # Execute workers
-    # for p in workers:
-    #     p.start()
-    # # Add worker to queue and wait until finished
-    # for p in workers:
-    #     p.join()
+    workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
+               for date_ in dates]
+
+    # Execute workers
+    for p in workers:
+        p.start()
+    # Add worker to queue and wait until finished
+    for p in workers:
+        p.join()
 
     workers = [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in
                range(0, cf.MAX_POOLS)]
@@ -165,3 +158,11 @@ def run(*args, **options):
                 run_demand(*args, **options)
             elif options['type'] == 'generation':
                 run_generation(*args, **options)
+
+
+if __name__ == '__main__':
+    n_uncompleted = len(os.listdir(cf.P114_INPUT_DIR))
+    n_completed = len(os.listdir(cf.P114_INPUT_DIR.replace('gz/', 'done/')))
+    print(n_completed / (n_completed + n_uncompleted))
+
+
