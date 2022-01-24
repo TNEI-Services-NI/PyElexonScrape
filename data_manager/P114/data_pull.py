@@ -68,7 +68,8 @@ def pull_p114_date_files_parallel(p114_date: dt.date, q: mp.Queue) -> None:
     if filenames is not None:
         print('{} relevant files found'.format(len(filenames)))
         for filename in tqdm(filenames):
-            get_p114_file(filename, overwrite=False)
+            if not os.path.exists(cf.P114_INPUT_DIR + filename):
+                get_p114_file(filename, overwrite=False)
             if type(q) == list:
                 continue
             else:

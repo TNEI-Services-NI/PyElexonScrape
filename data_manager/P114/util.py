@@ -219,8 +219,8 @@ def merge_data_subsplit():
     del dict_bmu_dfs
 
 
-def combine_data(q: mp.Queue, pool : int):
-    time.sleep(10)
+def combine_data(q: mp.Queue, pool: int):
+    time.sleep(1)
     t0 = dt.datetime.now()
     dict_data = None
     print('Running combine pool {}'.format(pool))
@@ -246,16 +246,24 @@ def combine_data(q: mp.Queue, pool : int):
                 os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
             move_files.append((cf.P114_INPUT_DIR + filename, cf.P114_INPUT_DIR.replace('/gz/', "/done/") + filename))
 
-            if count > 100:
+            if count > 100 and dict_data is not None:
                 for k, v in dict_data.items():
                     if len(v) > 0:
-                        filedir = foldername + f'{k}.csv'
-                        if os.path.isfile(filedir):
-                            v.to_csv(filedir, header=False, mode='a')
+                        if k == 'MPD':
+                            for gsp, df in v.reset_index(level=0).groupby('level_0'):
+                                filedir = foldername + f'gspdemand-{gsp}.p'
+                                df = df.iloc[:, 1:]
+                                if os.path.isfile(filedir):
+                                    df = pd.concat([pd.read_pickle(filedir), df])
+                                df.to_pickle(filedir)
                         else:
-                            v.to_csv(filedir)
+                            filedir = foldername + f'{k}.csv'
+                            if os.path.isfile(filedir):
+                                v.to_csv(filedir, header=False, mode='a')
+                            else:
+                                v.to_csv(filedir)
                 dict_data = None
-
+                count = 0
 
                 for files in move_files:
                     shutil.move(files[0], files[1])
@@ -263,7 +271,7 @@ def combine_data(q: mp.Queue, pool : int):
                 move_files = []
 
         print("Pool queue empty {}".format(pool))
-        time.sleep(180)
+        # time.sleep(180)
 
 
 
@@ -290,8 +298,6 @@ def insert_data(message_list, filename, dict_data = None, pool = [], target=None
     # each object in a processed file are consistent with this assumption
     df_all = pd.DataFrame({})
     df_gsp = pd.DataFrame({})
-
-
 
     columns = pd.MultiIndex.from_arrays([['ei' for x in range(1,51)]+['ii' for x in range(1,51)]+['vol' for x in range(1,51)], [x for x in range(1,51)]+[x for x in range(1,51)]+[x for x in range(1,51)]], names=[None, 'sp'])
     if dict_data is None:
@@ -338,7 +344,7 @@ def insert_data(message_list, filename, dict_data = None, pool = [], target=None
                 print("generating dir")
                 os.makedirs(foldername)
 
-            df_MPD = pd.concat(list_MPD)
+            df_MPD = pd.concat(list_MPD).reset_index()
 
             if return_result:
                 dict_data['MPD'] = pd.concat([df_MPD, dict_data['MPD']])
@@ -552,10 +558,28 @@ def file_to_message_list(filename):
 
 
 if __name__ == '__main__':
-    # gzs = os.listdir(cf.P114_INPUT_DIR.replace('gz/', 'non_target/'))
-    # src = cf.P114_INPUT_DIR.replace('gz/', 'non_target/')
-    # for file in gzs:
-    #     shutil.move('/'.join([src, file]), '/'.join([r'V:\Individuals Folders\Max\elexon\raw', file]))
-    gzs = os.listdir(cf.P114_INPUT_DIR.replace('gz/', '0/'))
-    dfs = [pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', f'0/{x}'), header=[0, 1], index_col=[0, 1, 2, 3]) for x in gzs]
+    import glob
+    gzs = glob.glob(cf.P114_INPUT_DIR.replace('gz/', 'done/*'))
+    src = cf.P114_INPUT_DIR.replace('gz/', 'done/')
+    for file in gzs:
+        shutil.move(file, file.replace('/done', '/gz'))
+    # df = pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', 'MPD.csv'), header=[0, 1, 2])
+    # # df.columns = [df.iloc[0, idx] if any(['Unnamed' in x_ for x_ in x]) else '_'.join(x) for idx, x in enumerate(df.columns)]
+    # df = df.iloc[:, 1:].copy()
+    #
+    # cols = [tuple(x_ if 'Unnamed' not in x_ else '' for x_ in x) for x in df.columns]
+    # cols[0] = ('', 'sp', 'group')
+    #
+    # df.columns = pd.MultiIndex.from_tuples(cols)
+    #
+    # folder = cf.P114_INPUT_DIR.replace('gz/', 'gsps/')
+    #
+    # if not os.path.exists(folder):
+    #     os.makedirs(folder)
+    #
+    # dict_data = {gsp: df.loc[df.iloc[:, 4] == gsp].drop(columns=df.columns[4]) for gsp in df.iloc[:, 4].unique()}
+    #
+    # for gsp, df in dict_data.items():
+    #     df.to_csv(folder + f'gspdemand-{gsp}.csv', index=False)
+
 

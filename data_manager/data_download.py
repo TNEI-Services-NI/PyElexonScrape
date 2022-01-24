@@ -46,12 +46,15 @@ def run_demand_parallel(*args, **options):
     if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/done/")):
         os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
 
+    # cf.P114_INPUT_DIR = cf.P114_INPUT_DIR.replace('gz', 'non_target')
     if cf.pull_pools == 0:
+        print('Adding files to queue for combine process')
         files = list(filter(lambda f: '.gz' in f, os.listdir(cf.P114_INPUT_DIR)))
         file_dates = [dt.datetime.strptime(filename.split('_')[1], '%Y%m%d') for filename in files]
         file_dates = list(zip(files, file_dates))
         file_dates = list(filter(lambda x: (x[1] >= start_date) & (x[1] <= end_date), file_dates))
-        file_dates = list(filter(lambda x: ('C0291' in x[0]) | ('C0301' in x[0]) | ('C0421' in x[0]), file_dates))
+        # file_dates = list(filter(lambda x: ('C0291' in x[0]) | ('C0301' in x[0]) | ('C0421' in x[0]), file_dates))
+        file_dates = list(filter(lambda x: ('C0301' in x[0]), file_dates))
         file_dates = list(sorted(file_dates))
         target_files = list(map(lambda x: x[0], file_dates))
         non_target_files = list(set(files) - set(target_files))
@@ -64,16 +67,17 @@ def run_demand_parallel(*args, **options):
         [q.put(
             {'filename': file_date[0], 'p114_date': file_date[1]})
             for file_date in file_dates]
+        print('\tDone')
 
-    workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
-               for date_ in dates]
-
-    # Execute workers
-    for p in workers:
-        p.start()
-    # Add worker to queue and wait until finished
-    for p in workers:
-        p.join()
+    # workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
+    #            for date_ in dates]
+    #
+    # # Execute workers
+    # for p in workers:
+    #     p.start()
+    # # Add worker to queue and wait until finished
+    # for p in workers:
+    #     p.join()
 
     workers = [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in
                range(0, cf.MAX_POOLS)]
@@ -85,7 +89,7 @@ def run_demand_parallel(*args, **options):
     for p in workers:
         p.join()
 
-    p114_util.merge_data()
+    # p114_util.merge_data()
 
 
 def run_demand(*args, **options):
@@ -163,6 +167,13 @@ def run(*args, **options):
 
 
 if __name__ == '__main__':
+    import pandas as pd
+    data = pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', 'MPD.csv'), header=[0,1,2])
+    data.loc[:, data.columns[4]] = data.loc[:, data.columns[4]].apply(lambda x: datetime.datetime.strptime(x, '%Y-%m-%d'))
+    print()
+
+
+
     n_uncompleted = len(os.listdir(cf.P114_INPUT_DIR))
     n_completed = len(os.listdir(cf.P114_INPUT_DIR.replace('gz/', 'done/')))
     print(n_completed / (n_completed + n_uncompleted))
