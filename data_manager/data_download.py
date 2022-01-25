@@ -4,6 +4,7 @@ import os.path
 import shutil
 import datetime
 import time
+import pandas as pd
 
 import data_manager._config as cf
 
@@ -25,6 +26,10 @@ def run_demand_parallel(*args, **options):
 
     start_date = dt.datetime(*[int(x) for x in options['date'][0].split('-')[:3]])
     end_date = dt.datetime(*[int(x) for x in options['date'][1].split('-')[:3]])
+
+    # dates = pd.read_csv('/'.join([p114_util.DIR, 'missing_dates.csv']), index_col=0)
+    # start_date = pd.to_datetime(dates.iloc[0, 0])
+    # end_date = pd.to_datetime(dates.iloc[-1, 0])
 
     start_dates = [dt.datetime(*(start_date + pool * ((end_date - start_date) / cf.pull_pools)).date().timetuple()[:3])
                    for
@@ -88,8 +93,8 @@ def run_demand_parallel(*args, **options):
     # Add worker to queue and wait until finished
     for p in workers:
         p.join()
-
-    # p114_util.merge_data()
+    #
+    # p114_util.merge_data(cf.MAX_POOLS)
 
 
 def run_demand(*args, **options):

@@ -10,6 +10,7 @@
 - Time: 09:37
 """
 import datetime
+import glob
 import datetime as dt
 import gzip
 import multiprocessing as mp
@@ -23,6 +24,8 @@ import pandas as pd
 import data_manager._config as cf
 from data_manager._data_definitions import *
 import io
+
+DIR = os.path.dirname(__file__)
 
 def add_delimiters(fpath, delimiter=','):
 
@@ -142,22 +145,33 @@ def fix_DST_days():
     print()
 
 
-def merge_data():
+def merge_data(max_pools=7):
     data_dir = cf.P114_INPUT_DIR.replace('gz/', '')
 
     pool_folders = list(filter(
-        lambda x: ('.gitkeep' not in x) & ('gz' not in x) & ('done' not in x) & ('fixed_dst' not in x) & (
+        lambda x: ('.gitkeep' not in x) & ('.p' not in x) & ('gz' not in x) & ('csv' not in x) & ('gsps' not in x) & ('done' not in x) & ('fixed_dst' not in x) & (
                     'non_target' not in x), os.listdir(data_dir)))
 
     pool_folder_files = {x: os.listdir('/'.join([data_dir, x])) for x in pool_folders}
 
     files = list(set(sum(pool_folder_files.values(), [])))
 
+    missing_dates = set()
+
+    if not os.path.exists(cf.P114_INPUT_DIR.replace('gz/', 'gsps/')):
+        os.makedirs(cf.P114_INPUT_DIR.replace('gz/', 'gsps/'))
+
     for file in files:
-        pool_files = sum([[pd.read_csv('/'.join([data_dir, pool, f_]), header=[0, 1], index_col=[0, 1, 2, 3]) for f_ in f if f_ == file] for pool, f in pool_folder_files.items()], [])
+        pool_files = sum([[pd.read_pickle('/'.join([data_dir, pool, f_])) for f_ in f if f_ == file] for pool, f in pool_folder_files.items()], [])
         df_data = pd.concat(pool_files)
-        df_data.to_csv('/'.join([data_dir, file]))
-    print()
+        df_data = df_data.sort_values(by='date')
+
+        missing_dates = missing_dates.union(set(pd.date_range(df_data['date'].sort_values().iloc[0], df_data['date'].sort_values().iloc[-1]).to_series().apply(lambda x: x.date())) - set(df_data['date']))
+
+        df_data.to_pickle('/'.join([cf.P114_INPUT_DIR.replace('gz/', 'gsps/'), file]))
+
+    missing_dates = pd.DataFrame({'missing': sorted(list(missing_dates))})
+    missing_dates.to_csv('missing_dates.csv')
 
 
 def merge_data_subsplit():
@@ -246,7 +260,7 @@ def combine_data(q: mp.Queue, pool: int):
                 os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
             move_files.append((cf.P114_INPUT_DIR + filename, cf.P114_INPUT_DIR.replace('/gz/', "/done/") + filename))
 
-            if count > 100 and dict_data is not None:
+            if (count > 100 or q.qsize() == 0) and dict_data is not None:
                 for k, v in dict_data.items():
                     if len(v) > 0:
                         if k == 'MPD':
@@ -558,11 +572,13 @@ def file_to_message_list(filename):
 
 
 if __name__ == '__main__':
-    import glob
-    gzs = glob.glob(cf.P114_INPUT_DIR.replace('gz/', 'done/*'))
-    src = cf.P114_INPUT_DIR.replace('gz/', 'done/')
-    for file in gzs:
-        shutil.move(file, file.replace('/done', '/gz'))
+    # import glob
+    # gzs = glob.glob(cf.P114_INPUT_DIR.replace('gz/', 'done/*'))
+    # src = cf.P114_INPUT_DIR.replace('gz/', 'done/')
+    # for file in gzs:
+    #     shutil.move(file, file.replace('/done', '/gz'))
+
+    merge_data()
     # df = pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', 'MPD.csv'), header=[0, 1, 2])
     # # df.columns = [df.iloc[0, idx] if any(['Unnamed' in x_ for x_ in x]) else '_'.join(x) for idx, x in enumerate(df.columns)]
     # df = df.iloc[:, 1:].copy()
