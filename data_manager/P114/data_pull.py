@@ -11,10 +11,12 @@
 """
 import datetime as dt
 import json
+import pandas as pd
 import multiprocessing as mp
 import os.path
 import urllib.request
 
+import pandas as pd
 import requests
 from tqdm import tqdm
 
@@ -49,7 +51,7 @@ def pull_p114_date_files(p114_date: dt.date) -> None:
         print('No relevant files found')
 
 
-def pull_p114_date_files_parallel(p114_date: dt.date, q: mp.Queue) -> None:
+def pull_p114_date_files_parallel(dates, q: mp.Queue, t0) -> None:
     """
     Retrieves data for nominated day and processes it
 
@@ -64,16 +66,17 @@ def pull_p114_date_files_parallel(p114_date: dt.date, q: mp.Queue) -> None:
     Raises
     ------
     """
-    filenames = get_p114_filenames_for_date(p114_date)
-    if filenames is not None:
-        print('{} relevant files found'.format(len(filenames)))
-        for filename in tqdm(filenames):
-            if not os.path.exists(cf.P114_INPUT_DIR + filename):
-                get_p114_file(filename, overwrite=False)
+    # filenames = get_p114_filenames_for_date(p114_date)
+    completed_requests = 0
+    if dates is not None:
+        print('{} relevant files found'.format(len(dates)))
+        for date in dates.iterrows():
+            if not os.path.exists(cf.P114_INPUT_DIR + date[1]['file'][0]):
+                get_p114_file(date[1]['file'][0], overwrite=False)
             if type(q) == list:
                 continue
             else:
-                q.put({'filename': filename, 'p114_date': p114_date})
+                q.put({'filename': date[1]['file'][0], 'p114_date': date[1]['date']})
     else:
         print('No relevant files found')
 
@@ -98,9 +101,7 @@ def get_p114_filenames_for_date(p114_date):
 
     """
 
-    response = requests.get(cf.P114_LIST_URL.format(cf.ELEXON_KEY,
-                                                 dt.datetime.strftime(p114_date, "%Y-%m-%d")))
-    json_data = json.loads(response.text)
+
 
     if len(json_data) > 0:
         unrecognised_feeds = [x for x in json_data if x.split('_')[0] not in PROCESSED_FEEDS + IGNORED_FEEDS]
@@ -136,17 +137,48 @@ def get_p114_file(filename, overwrite=False):
         urllib.request.urlretrieve(remote_url,
                                    cf.P114_INPUT_DIR + filename)
 
-def pull_data_parallel(start_date, end_date, t0, q, status_q):
-    completed_requests = 0
-    date = start_date
-    while (date >= start_date) if cf.reverse else (date <= end_date):
-        if ((dt.datetime.now() - t0).seconds / 60) - (cf.request_interval_mins * completed_requests) > 0:
-            print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
-            print("downloading data for " + '{:%Y-%m-%d}'.format(date))
-            pull_p114_date_files_parallel(date, q)
-            date += dt.timedelta(days=-1 if cf.reverse else 1)
-            completed_requests += -1 if cf.reverse else 1
-    return 0
+
+def get_dates():
+    all_dates = []
+    for p114_date_ in pd.date_range('30-04-2010', '31-12-2020'):
+        print(p114_date_)
+        response = requests.get(cf.P114_LIST_URL.format(cf.ELEXON_KEY,
+                                                     dt.datetime.strftime(p114_date_, "%Y-%m-%d")))
+        json_data = json.loads(response.text)
+
+        if len(json_data) == 0:
+            continue
+
+        dates = [(
+            dt.datetime.strptime(d[0], '%Y%m%d').date(),
+            dt.datetime.strptime(d[1], '%Y%m%d%H%M%S').date(),
+            d[2],
+            d[3],
+            d[4],
+        )
+                 for d in [(
+                k.split('_')[1],
+                k.split('_')[-1].strip('.gz'),
+                (k,v),
+                k.split('_')[0],
+                k.split('_')[3],
+            )
+                     for k, v in json_data.items()]]
+
+        dates = pd.DataFrame({
+            'date': [d[0] for d in dates],
+            'settlement': [d[1] for d in dates],
+            'file': [d[2] for d in dates],
+            'message': [d[3] for d in dates],
+            'group': [d[4] for d in dates],
+        })
+        all_dates.append(dates)
+    return pd.concat(all_dates)
+
+
+def pull_data_parallel(dates, t0, q, status_q):
+    print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
+    pull_p114_date_files_parallel(dates, q, t0)
 
 
 def pull_data(date, end_date, t0):

@@ -17,6 +17,8 @@ import multiprocessing as mp
 import os.path
 import shutil
 import time
+from tqdm import tqdm
+import shutil
 from functools import reduce
 
 import pandas as pd
@@ -170,8 +172,14 @@ def merge_data(max_pools=7):
 
         df_data.to_pickle('/'.join([cf.P114_INPUT_DIR.replace('gz/', 'gsps/'), file]))
 
+    [shutil.rmtree('/'.join([data_dir, x])) for x in pool_folders]
+    shutil.make_archive(cf.P114_INPUT_DIR.replace('gz/', 'gsps'), 'zip', cf.P114_INPUT_DIR.replace('gz/', 'gsps/'))
+
     missing_dates = pd.DataFrame({'missing': sorted(list(missing_dates))})
     missing_dates.to_csv('missing_dates.csv')
+
+    shutil.move(cf.P114_INPUT_DIR.replace('gz/', 'gsps.zip'),
+                r'N:\National Grid\13771 - Probabilistic Stability\3 - Data\elexon\gsps_10_19.zip')
 
 
 def merge_data_subsplit():
@@ -247,45 +255,46 @@ def combine_data(q: mp.Queue, pool: int):
     if not os.path.exists(foldername):
         print("generating dir")
         os.makedirs(foldername)
-    for i in range(20):
-        while q.qsize() > 0:
-            count += 1
-            t1 = dt.datetime.now()
-            _file_data = q.get()
-            filename = _file_data['filename']
-            p114_date = _file_data['p114_date']
-            dict_data = insert_data(file_to_message_list(filename), filename, dict_data, pool)
-            # os.remove(cf.P114_INPUT_DIR + filename)
-            if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/done/")):
-                os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
-            move_files.append((cf.P114_INPUT_DIR + filename, cf.P114_INPUT_DIR.replace('/gz/', "/done/") + filename))
-
-            if (count > 100 or q.qsize() == 0) and dict_data is not None:
-                for k, v in dict_data.items():
-                    if len(v) > 0:
-                        if k == 'MPD':
-                            for gsp, df in v.reset_index(level=0).groupby('level_0'):
-                                filedir = foldername + f'gspdemand-{gsp}.p'
-                                df = df.iloc[:, 1:]
-                                if os.path.isfile(filedir):
-                                    df = pd.concat([pd.read_pickle(filedir), df])
-                                df.to_pickle(filedir)
-                        else:
-                            filedir = foldername + f'{k}.csv'
-                            if os.path.isfile(filedir):
-                                v.to_csv(filedir, header=False, mode='a')
+    for i in range(5):
+        with tqdm(total=int(q.qsize()/cf.MAX_POOLS)) as pbar:
+            while q.qsize() > 0:
+                count += 1
+                t1 = dt.datetime.now()
+                _file_data = q.get()
+                filename = _file_data['filename']
+                p114_date = _file_data['p114_date']
+                dict_data = insert_data(file_to_message_list(filename), filename, dict_data, pool)
+                # os.remove(cf.P114_INPUT_DIR + filename)
+                if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/done/")):
+                    os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
+                move_files.append((cf.P114_INPUT_DIR + filename, cf.P114_INPUT_DIR.replace('/gz/', "/done/") + filename))
+                pbar.update()
+                if (count > 20 or q.qsize() == 0) and dict_data is not None:
+                    for k, v in dict_data.items():
+                        if len(v) > 0:
+                            if k == 'MPD':
+                                for gsp, df in v.reset_index(level=0).groupby('level_0'):
+                                    filedir = foldername + f'gspdemand-{gsp}.p'
+                                    df = df.iloc[:, 1:]
+                                    if os.path.isfile(filedir):
+                                        df = pd.concat([pd.read_pickle(filedir), df])
+                                    df.to_pickle(filedir)
                             else:
-                                v.to_csv(filedir)
-                dict_data = None
-                count = 0
+                                filedir = foldername + f'{k}.csv'
+                                if os.path.isfile(filedir):
+                                    v.to_csv(filedir, header=False, mode='a')
+                                else:
+                                    v.to_csv(filedir)
+                    dict_data = None
+                    count = 0
 
-                for files in move_files:
-                    shutil.move(files[0], files[1])
+                    # for files in move_files:
+                    #     shutil.move(files[0], files[1])
 
-                move_files = []
+                    move_files = []
 
         print("Pool queue empty {}".format(pool))
-        # time.sleep(180)
+        time.sleep(10)
 
 
 
@@ -574,6 +583,7 @@ def file_to_message_list(filename):
 if __name__ == '__main__':
     # import glob
     # gzs = glob.glob(cf.P114_INPUT_DIR.replace('gz/', 'done/*'))
+    # print()
     # src = cf.P114_INPUT_DIR.replace('gz/', 'done/')
     # for file in gzs:
     #     shutil.move(file, file.replace('/done', '/gz'))
@@ -597,5 +607,5 @@ if __name__ == '__main__':
     #
     # for gsp, df in dict_data.items():
     #     df.to_csv(folder + f'gspdemand-{gsp}.csv', index=False)
-
+    # combine_data(mp.Queue(), 0)
 

@@ -5,6 +5,7 @@ import shutil
 import datetime
 import time
 import pandas as pd
+import numpy as np
 
 import data_manager._config as cf
 
@@ -24,12 +25,15 @@ def run_demand_parallel(*args, **options):
     if not os.path.exists(cf.P114_INPUT_DIR):
         os.makedirs(cf.P114_INPUT_DIR)
 
-    start_date = dt.datetime(*[int(x) for x in options['date'][0].split('-')[:3]])
-    end_date = dt.datetime(*[int(x) for x in options['date'][1].split('-')[:3]])
+    missing = options.get('missing', False)
 
-    # dates = pd.read_csv('/'.join([p114_util.DIR, 'missing_dates.csv']), index_col=0)
-    # start_date = pd.to_datetime(dates.iloc[0, 0])
-    # end_date = pd.to_datetime(dates.iloc[-1, 0])
+    if missing:
+        dates = pd.read_csv('/'.join([p114_util.DIR, 'missing_dates.csv']), index_col=0)
+        start_date = pd.to_datetime(dates.iloc[0, 0])
+        end_date = pd.to_datetime(dates.iloc[-1, 0])
+    else:
+        start_date = dt.datetime(*[int(x) for x in options['date'][0].split('-')[:3]])
+        end_date = dt.datetime(*[int(x) for x in options['date'][1].split('-')[:3]])
 
     start_dates = [dt.datetime(*(start_date + pool * ((end_date - start_date) / cf.pull_pools)).date().timetuple()[:3])
                    for
@@ -51,6 +55,22 @@ def run_demand_parallel(*args, **options):
     if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/done/")):
         os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
 
+    if os.path.exists('settlement_dates.p'):
+    # if 0:
+        all_dates = pd.read_pickle('settlement_dates.p')
+    else:
+        all_dates = P114_data_pull.get_dates()
+        all_dates.loc[:, 'date'] = all_dates.loc[:, 'date'].apply(pd.to_datetime)
+        all_dates.loc[:, 'settlement'] = all_dates.loc[:, 'settlement'].apply(pd.to_datetime)
+        all_dates = all_dates.sort_values(by=['group', 'date', 'settlement'])
+        all_dates.to_pickle('settlement_dates.p')
+
+    PROCESSED_FEEDS = ['C0301']
+
+    settlement_dates = all_dates.loc[all_dates['date'].isin(pd.date_range(start_date, end_date)), :]
+    settlement_dates = settlement_dates.loc[settlement_dates['message'].isin(PROCESSED_FEEDS), :]
+    settlement_dates = settlement_dates.drop_duplicates(subset=['group', 'date'], keep='last')
+
     # cf.P114_INPUT_DIR = cf.P114_INPUT_DIR.replace('gz', 'non_target')
     if cf.pull_pools == 0:
         print('Adding files to queue for combine process')
@@ -61,28 +81,35 @@ def run_demand_parallel(*args, **options):
         # file_dates = list(filter(lambda x: ('C0291' in x[0]) | ('C0301' in x[0]) | ('C0421' in x[0]), file_dates))
         file_dates = list(filter(lambda x: ('C0301' in x[0]), file_dates))
         file_dates = list(sorted(file_dates))
-        target_files = list(map(lambda x: x[0], file_dates))
-        non_target_files = list(set(files) - set(target_files))
-        for non_target_file in non_target_files:
-            if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/non_target/")):
-                os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/non_target/"))
-            shutil.move(cf.P114_INPUT_DIR + '/{}'.format(non_target_file),
-                        cf.P114_INPUT_DIR.replace('/gz/', "/non_target/") + '{}'.format(non_target_file))
+
+
+        target_files = set(settlement_dates['file'].apply(lambda x: x[0]).tolist())
+        stored_files = list(map(lambda x: x[0], file_dates))
+
+        stored_target_files = set(stored_files).intersection(target_files)
+        missing_target_files = set(target_files).difference(stored_files)
+
+        non_target_files = list(set(files) - set(stored_target_files))
+        # for non_target_file in non_target_files:
+        #     if not os.path.exists(cf.P114_INPUT_DIR.replace('/gz/', "/non_target/")):
+        #         os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/non_target/"))
+        #     shutil.move(cf.P114_INPUT_DIR + '/{}'.format(non_target_file),
+        #                 cf.P114_INPUT_DIR.replace('/gz/', "/non_target/") + '{}'.format(non_target_file))
 
         [q.put(
-            {'filename': file_date[0], 'p114_date': file_date[1]})
-            for file_date in file_dates]
+            {'filename': file_date[1]['file'][0], 'p114_date': file_date[1]['date'].date()})
+            for file_date in settlement_dates.loc[settlement_dates['file'].apply(lambda x: x[0]).isin(stored_target_files), ['date', 'file']].iterrows()]
         print('\tDone')
+    else:
+        workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_, t0, q, status_q,))
+                   for date_ in np.array_split(settlement_dates, cf.pull_pools)]
 
-    # workers = [mp.Process(target=P114_data_pull.pull_data_parallel, args=(date_[0], date_[1], t0, q, status_q,))
-    #            for date_ in dates]
-    #
-    # # Execute workers
-    # for p in workers:
-    #     p.start()
-    # # Add worker to queue and wait until finished
-    # for p in workers:
-    #     p.join()
+        # Execute workers
+        for p in workers:
+            p.start()
+        # Add worker to queue and wait until finished
+        for p in workers:
+            p.join()
 
     workers = [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in
                range(0, cf.MAX_POOLS)]
@@ -93,8 +120,8 @@ def run_demand_parallel(*args, **options):
     # Add worker to queue and wait until finished
     for p in workers:
         p.join()
-    #
-    # p114_util.merge_data(cf.MAX_POOLS)
+
+    p114_util.merge_data(cf.MAX_POOLS)
 
 
 def run_demand(*args, **options):

@@ -15,10 +15,10 @@ B1610_INPUT_DIR = BASE_DIR+r"/data_manager/data_/B1610/csv/"
 B1610_PROCESSED_DIR = BASE_DIR+r"/data_manager/data_/B1610/"
 
 ELEXON_KEY = 'nvxyve1ubai87gz'
-TARGET_MESSAGES = ['AGV', 'AGP', 'MPD', 'GP9', 'GMP', 'ABV', 'ABP']
-# TARGET_MESSAGES = ['MPD', 'GP9', 'GMP']
+# TARGET_MESSAGES = ['AGV', 'AGP', 'MPD', 'GP9', 'GMP', 'ABV', 'ABP']
+TARGET_MESSAGES = ['MPD', 'GP9', 'GMP']
 
-MAX_POOLS = 1
+MAX_POOLS = 6
 
 request_interval_mins = 0
 request_interval_secs = 0
