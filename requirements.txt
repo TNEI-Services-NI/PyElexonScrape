@@ -2,3 +2,6 @@ pandas==1.1.5
 tqdm
 numpy==1.19.2
 requests
+openpyxl
+pyarrow
+xlrd >= 1.2.0
