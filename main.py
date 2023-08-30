@@ -9,4 +9,4 @@ if __name__ == '__main__':
     # run(date=['2017-07-10', '2017-12-31'], type='generation', mode='parallel')
     # run(date=['2018-01-01', '2019-12-31'], type='generation', mode='parallel')
     # run(type='demand', mode='parallel', missing=True)
-    run(date=['2010-01-01', '2023-08-30'], type='demand', mode='parallel')
+    run(date=['2010-03-27', '2010-04-01'], type='demand', mode='parallel')

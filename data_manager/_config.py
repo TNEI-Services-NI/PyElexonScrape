@@ -1,6 +1,7 @@
 import os
 import json
 
+DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # P114 downloads
@@ -15,19 +16,19 @@ B1610_INPUT_DIR = BASE_DIR+r"/data_manager/data_/B1610/csv/"
 
 B1610_PROCESSED_DIR = BASE_DIR+r"/data_manager/data_/B1610/"
 
-ELEXON_KEY = json.load(open('./data_manager/config.json'))["ELEXON_KEY"]
+ELEXON_KEY = json.load(open(f'{DIR}/config.json'))["ELEXON_KEY"]
 
 # TARGET_MESSAGES = ['AGV', 'AGP', 'MPD', 'GP9', 'GMP', 'ABV', 'ABP']
 TARGET_MESSAGES = ['MPD', 'GP9', 'GMP']
 
 PROCESSED_FEEDS = ['C0301']
 
-MAX_POOLS = 2
+MAX_POOLS = 1
 
 request_interval_mins = 0
 request_interval_secs = 0
 
-pull_pools = 2
+pull_pools = 0
 
 reverse = False
 

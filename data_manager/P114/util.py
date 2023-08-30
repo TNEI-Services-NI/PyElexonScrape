@@ -150,36 +150,40 @@ def fix_DST_days():
 def merge_data(max_pools=7):
     data_dir = cf.P114_INPUT_DIR.replace('gz/', '')
 
-    pool_folders = list(filter(
-        lambda x: ('.gitkeep' not in x) & ('.p' not in x) & ('gz' not in x) & ('csv' not in x) & ('gsps' not in x) & ('done' not in x) & ('fixed_dst' not in x) & (
-                    'non_target' not in x), os.listdir(data_dir)))
-
-    pool_folder_files = {x: os.listdir('/'.join([data_dir, x])) for x in pool_folders}
-
-    files = list(set(sum(pool_folder_files.values(), [])))
-
+    files = glob.glob(f'{data_dir}/**/*.p', recursive=True)
+    files = list(filter(lambda x: ('gsps' not in x) & ('done' not in x) & ('fixed_dst' not in x) & ('non_target' not in x), files))
+    files = pd.DataFrame([(f, os.path.basename(f).strip('gspdemand-').strip('.p')) for f in files], columns=['file', 'gsp'])
     missing_dates = set()
 
     if not os.path.exists(cf.P114_INPUT_DIR.replace('gz/', 'gsps/')):
         os.makedirs(cf.P114_INPUT_DIR.replace('gz/', 'gsps/'))
 
-    for file in files:
-        pool_files = sum([[pd.read_pickle('/'.join([data_dir, pool, f_])) for f_ in f if f_ == file] for pool, f in pool_folder_files.items()], [])
-        df_data = pd.concat(pool_files)
+    for gsp, file in files.groupby('gsp'):
+        df_data = pd.concat([pd.read_pickle(f) for f in file['file']])
         df_data = df_data.sort_values(by='date')
-
         missing_dates = missing_dates.union(set(pd.date_range(df_data['date'].sort_values().iloc[0], df_data['date'].sort_values().iloc[-1]).to_series().apply(lambda x: x.date())) - set(df_data['date']))
-
-        df_data.to_pickle('/'.join([cf.P114_INPUT_DIR.replace('gz/', 'gsps/'), file]))
-
-    [shutil.rmtree('/'.join([data_dir, x])) for x in pool_folders]
-    shutil.make_archive(cf.P114_INPUT_DIR.replace('gz/', 'gsps'), 'zip', cf.P114_INPUT_DIR.replace('gz/', 'gsps/'))
-
-    missing_dates = pd.DataFrame({'missing': sorted(list(missing_dates))})
-    missing_dates.to_csv('missing_dates.csv')
-
-    shutil.move(cf.P114_INPUT_DIR.replace('gz/', 'gsps.zip'),
-                r'N:\National Grid\13771 - Probabilistic Stability\3 - Data\elexon\gsps_10_19.zip')
+        lvl0_col = df_data.xs('level_0', level=0, axis=1, drop_level=False).columns.tolist()
+        ei_cols = df_data.xs('ei', level=0, axis=1, drop_level=False).columns.tolist()
+        ii_cols = df_data.xs('ii', level=0, axis=1, drop_level=False).columns.tolist()
+        vol_cols = df_data.xs('vol', level=0, axis=1, drop_level=False).columns.tolist()
+        index = set(df_data.columns)-set(set(ei_cols).union(set(ii_cols)).union(set(vol_cols)))-set(lvl0_col)
+        index = list(sorted(list(index)))
+        df_data = df_data.set_index(index)
+        df_data.index.names = [i[0] for i in index]
+        df_data = df_data.melt(ignore_index=False)
+        df_data.columns = ['attribute', 'sp', 'value']
+        df_data = df_data.dropna(subset=['value'])
+        df_data.to_pickle('/'.join([cf.P114_INPUT_DIR.replace('gz/', 'gsps/'), f'gspdemand-{gsp}.p']))
+        break
+    #
+    # [shutil.rmtree('/'.join([data_dir, x])) for x in pool_folders]
+    # shutil.make_archive(cf.P114_INPUT_DIR.replace('gz/', 'gsps'), 'zip', cf.P114_INPUT_DIR.replace('gz/', 'gsps/'))
+    #
+    # missing_dates = pd.DataFrame({'missing': sorted(list(missing_dates))})
+    # missing_dates.to_csv('missing_dates.csv')
+    #
+    # shutil.move(cf.P114_INPUT_DIR.replace('gz/', 'gsps.zip'),
+    #             r'N:\National Grid\13771 - Probabilistic Stability\3 - Data\elexon\gsps_10_19.zip')
 
 
 def merge_data_subsplit():
@@ -269,7 +273,7 @@ def combine_data(q: mp.Queue, pool: int):
                     os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
                 move_files.append((cf.P114_INPUT_DIR + filename, cf.P114_INPUT_DIR.replace('/gz/', "/done/") + filename))
                 pbar.update()
-                if (count > 20 or q.qsize() == 0) and dict_data is not None:
+                if (count >= 20 or q.qsize() == 0) and dict_data is not None:
                     for k, v in dict_data.items():
                         if len(v) > 0:
                             if k == 'MPD':
@@ -346,7 +350,7 @@ def insert_data(message_list, filename, dict_data = None, pool = [], target=None
             #                                                                      group=MPD[
             #                                                                          'gsp_group']).pivot_table(
             #     index=['group', 'sr_type', 'run_no', 'date'], columns=['sp']) for m in message_list_list}
-            list_MPD = {m[0]['gsp_id']:pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
+            list_MPD = {m[0]['gsp_id']: pd.DataFrame(m[1:]).drop(columns=['message_type']).assign(date=p114_date.date(),
                                                                                  sr_type=MPD['sr_type'],
                                                                                  run_no=MPD['run_no'],
                                                                                  group=MPD['gsp_group'],
@@ -581,31 +585,38 @@ def file_to_message_list(filename):
 
 
 if __name__ == '__main__':
-    # import glob
-    # gzs = glob.glob(cf.P114_INPUT_DIR.replace('gz/', 'done/*'))
+    # cols = ['sp', 'group', 'sr_type', 'run_no', 'date', ('ei', '1'), ('ei', '2'), ('ei', '3'), ('ei', '4'), ('ei', '5'),
+    #         ('ei', '6'), ('ei', '7'), ('ei', '8'), ('ei', '9'), ('ei', '10'), ('ei', '11'), ('ei', '12'), ('ei', '13'),
+    #         ('ei', '14'), ('ei', '15'), ('ei', '16'), ('ei', '17'), ('ei', '18'), ('ei', '19'), ('ei', '20'),
+    #         ('ei', '21'), ('ei', '22'), ('ei', '23'), ('ei', '24'), ('ei', '25'), ('ei', '26'), ('ei', '27'),
+    #         ('ei', '28'), ('ei', '29'), ('ei', '30'), ('ei', '31'), ('ei', '32'), ('ei', '33'), ('ei', '34'),
+    #         ('ei', '35'), ('ei', '36'), ('ei', '37'), ('ei', '38'), ('ei', '39'), ('ei', '40'), ('ei', '41'),
+    #         ('ei', '42'), ('ei', '43'), ('ei', '44'), ('ei', '45'), ('ei', '46'), ('ei', '47'), ('ei', '48'),
+    #         ('ii', '1'), ('ii', '2'), ('ii', '3'), ('ii', '4'), ('ii', '5'), ('ii', '6'), ('ii', '7'), ('ii', '8'),
+    #         ('ii', '9'), ('ii', '10'), ('ii', '11'), ('ii', '12'), ('ii', '13'), ('ii', '14'), ('ii', '15'),
+    #         ('ii', '16'), ('ii', '17'), ('ii', '18'), ('ii', '19'), ('ii', '20'), ('ii', '21'), ('ii', '22'),
+    #         ('ii', '23'), ('ii', '24'), ('ii', '25'), ('ii', '26'), ('ii', '27'), ('ii', '28'), ('ii', '29'),
+    #         ('ii', '30'), ('ii', '31'), ('ii', '32'), ('ii', '33'), ('ii', '34'), ('ii', '35'), ('ii', '36'),
+    #         ('ii', '37'), ('ii', '38'), ('ii', '39'), ('ii', '40'), ('ii', '41'), ('ii', '42'), ('ii', '43'),
+    #         ('ii', '44'), ('ii', '45'), ('ii', '46'), ('ii', '47'), ('ii', '48'), ('vol', '1'), ('vol', '2'),
+    #         ('vol', '3'), ('vol', '4'), ('vol', '5'), ('vol', '6'), ('vol', '7'), ('vol', '8'), ('vol', '9'),
+    #         ('vol', '10'), ('vol', '11'), ('vol', '12'), ('vol', '13'), ('vol', '14'), ('vol', '15'), ('vol', '16'),
+    #         ('vol', '17'), ('vol', '18'), ('vol', '19'), ('vol', '20'), ('vol', '21'), ('vol', '22'), ('vol', '23'),
+    #         ('vol', '24'), ('vol', '25'), ('vol', '26'), ('vol', '27'), ('vol', '28'), ('vol', '29'), ('vol', '30'),
+    #         ('vol', '31'), ('vol', '32'), ('vol', '33'), ('vol', '34'), ('vol', '35'), ('vol', '36'), ('vol', '37'),
+    #         ('vol', '38'), ('vol', '39'), ('vol', '40'), ('vol', '41'), ('vol', '42'), ('vol', '43'), ('vol', '44'),
+    #         ('vol', '45'), ('vol', '46'), ('vol', '47'), ('vol', '48')]
+    # dict_dates = {}
+    # for f in tqdm(glob.glob(r'N:\National Grid\13771 - Probabilistic Stability\3 - Data\elexon\gsp demand\*.csv')[284:]):
+    #     gsp = os.path.basename(f).strip('gspdemand-').strip('.csv')
+    #     data = pd.read_csv(f)
+    #     try:
+    #         data.columns = cols
+    #     except:
+    #         print()
+    #         data.columns = cols
+    #     data = data.loc[data['sr_type']=='DF', :]
+    #     dict_dates[gsp] = data['date'].unique()
+    #     # data = data.set_index(['sp', 'group', 'sr_type', 'run_no', 'date'])
     # print()
-    # src = cf.P114_INPUT_DIR.replace('gz/', 'done/')
-    # for file in gzs:
-    #     shutil.move(file, file.replace('/done', '/gz'))
-
     merge_data()
-    # df = pd.read_csv(cf.P114_INPUT_DIR.replace('gz/', 'MPD.csv'), header=[0, 1, 2])
-    # # df.columns = [df.iloc[0, idx] if any(['Unnamed' in x_ for x_ in x]) else '_'.join(x) for idx, x in enumerate(df.columns)]
-    # df = df.iloc[:, 1:].copy()
-    #
-    # cols = [tuple(x_ if 'Unnamed' not in x_ else '' for x_ in x) for x in df.columns]
-    # cols[0] = ('', 'sp', 'group')
-    #
-    # df.columns = pd.MultiIndex.from_tuples(cols)
-    #
-    # folder = cf.P114_INPUT_DIR.replace('gz/', 'gsps/')
-    #
-    # if not os.path.exists(folder):
-    #     os.makedirs(folder)
-    #
-    # dict_data = {gsp: df.loc[df.iloc[:, 4] == gsp].drop(columns=df.columns[4]) for gsp in df.iloc[:, 4].unique()}
-    #
-    # for gsp, df in dict_data.items():
-    #     df.to_csv(folder + f'gspdemand-{gsp}.csv', index=False)
-    # combine_data(mp.Queue(), 0)
-
