@@ -58,6 +58,21 @@ def run_demand_parallel(*args, **options):
     if os.path.exists('settlement_dates.p'):
     # if 0:
         all_dates = pd.read_pickle('settlement_dates.p')
+        dates = pd.to_datetime(all_dates['date'])
+        from_ = dates.min()
+        to_ = dates.max()
+        date_sequence = pd.date_range(from_, to_, freq='d')
+        if date_sequence.isin(all_dates['date']).all():
+            pass
+        else:
+            pass
+        if pd.to_datetime(options['date'][1]) > to_:
+            all_dates_ = P114_data_pull.get_dates(to_.strftime("%Y-%m-%d"), options['date'][1])
+            all_dates_.loc[:, 'date'] = pd.to_datetime(all_dates_.loc[:, 'date'])
+            all_dates_.loc[:, 'settlement'] = pd.to_datetime(all_dates_.loc[:, 'settlement'])
+            all_dates = pd.concat([all_dates, all_dates_])
+            all_dates = all_dates.sort_values(by=['group', 'date', 'settlement'])
+            all_dates.to_pickle('settlement_dates.p')
     else:
         all_dates = P114_data_pull.get_dates()
         all_dates.loc[:, 'date'] = all_dates.loc[:, 'date'].apply(pd.to_datetime)

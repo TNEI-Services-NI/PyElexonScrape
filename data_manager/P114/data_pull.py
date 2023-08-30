@@ -138,9 +138,9 @@ def get_p114_file(filename, overwrite=False):
                                    cf.P114_INPUT_DIR + filename)
 
 
-def get_dates():
+def get_dates(from_='30-04-2010', to_='31-12-2020'):
     all_dates = []
-    for p114_date_ in pd.date_range('30-04-2010', '31-12-2020'):
+    for p114_date_ in pd.date_range(from_, to_):
         print(p114_date_)
         response = requests.get(cf.P114_LIST_URL.format(cf.ELEXON_KEY,
                                                      dt.datetime.strftime(p114_date_, "%Y-%m-%d")))
