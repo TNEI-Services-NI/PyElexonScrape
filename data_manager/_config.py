@@ -1,4 +1,5 @@
 import os
+import json
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -14,7 +15,8 @@ B1610_INPUT_DIR = BASE_DIR+r"/data_manager/data_/B1610/csv/"
 
 B1610_PROCESSED_DIR = BASE_DIR+r"/data_manager/data_/B1610/"
 
-ELEXON_KEY = 'nvxyve1ubai87gz'
+ELEXON_KEY = json.load(open('./data_manager/config.json'))["ELEXON_KEY"]
+
 # TARGET_MESSAGES = ['AGV', 'AGP', 'MPD', 'GP9', 'GMP', 'ABV', 'ABP']
 TARGET_MESSAGES = ['MPD', 'GP9', 'GMP']
 
