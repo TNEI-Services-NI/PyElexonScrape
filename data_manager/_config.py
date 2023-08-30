@@ -18,12 +18,14 @@ ELEXON_KEY = 'nvxyve1ubai87gz'
 # TARGET_MESSAGES = ['AGV', 'AGP', 'MPD', 'GP9', 'GMP', 'ABV', 'ABP']
 TARGET_MESSAGES = ['MPD', 'GP9', 'GMP']
 
-MAX_POOLS = 6
+PROCESSED_FEEDS = ['C0301']
+
+MAX_POOLS = 2
 
 request_interval_mins = 0
 request_interval_secs = 0
 
-pull_pools = 0
+pull_pools = 2
 
 reverse = False
 

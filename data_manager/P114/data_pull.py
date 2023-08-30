@@ -66,17 +66,18 @@ def pull_p114_date_files_parallel(dates, q: mp.Queue, t0) -> None:
     Raises
     ------
     """
-    # filenames = get_p114_filenames_for_date(p114_date)
-    completed_requests = 0
     if dates is not None:
         print('{} relevant files found'.format(len(dates)))
-        for date in dates.iterrows():
+        for date in tqdm(dates.iterrows(), total=len(dates)):
             if not os.path.exists(cf.P114_INPUT_DIR + date[1]['file'][0]):
                 get_p114_file(date[1]['file'][0], overwrite=False)
             if type(q) == list:
                 continue
             else:
-                q.put({'filename': date[1]['file'][0], 'p114_date': date[1]['date']})
+                if os.path.exists(cf.P114_INPUT_DIR + date[1]['file'][0]):
+                    q.put({'filename': date[1]['file'][0], 'p114_date': date[1]['date']})
+                else:
+                    print(f'issue: {date}')
     else:
         print('No relevant files found')
 
@@ -100,8 +101,9 @@ def get_p114_filenames_for_date(p114_date):
 
 
     """
-
-
+    response = requests.get(cf.P114_LIST_URL.format(cf.ELEXON_KEY,
+                                                 dt.datetime.strftime(p114_date, "%Y-%m-%d")))
+    json_data = json.loads(response.text)
 
     if len(json_data) > 0:
         unrecognised_feeds = [x for x in json_data if x.split('_')[0] not in PROCESSED_FEEDS + IGNORED_FEEDS]
@@ -132,10 +134,13 @@ def get_p114_file(filename, overwrite=False):
 
     """
     # print(filename)
-    if not os.path.isfile(cf.P114_INPUT_DIR + filename) or overwrite:
+    if not os.path.isfile(cf.P114_INPUT_DIR + filename) or overwrite or os.path.exists(cf.P114_INPUT_DIR + '~' + filename):
         remote_url = (cf.P114_DOWNLOAD_URL.format(cf.ELEXON_KEY, filename))
+        with open(cf.P114_INPUT_DIR + '~' + filename, 'w') as f:
+            pass
         urllib.request.urlretrieve(remote_url,
                                    cf.P114_INPUT_DIR + filename)
+        os.remove(cf.P114_INPUT_DIR + '~' + filename)
 
 
 def get_dates(from_='30-04-2010', to_='31-12-2020'):

@@ -1,14 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-- Author: 
-- Position: 
-- Company: TNEI Services, Glasgow
-- E-mail: 
-- IDE: PyCharm
-- Project Name: gb-data-pull
-- Date: 02/08/2021
-- Time: 09:38
-"""
 
 import os
 import pandas as pd
