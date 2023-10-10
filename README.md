@@ -54,3 +54,8 @@ options = {
 }
 run(**options)
 ```
+
+### Settlement Details
+![image](https://github.com/max-mcfarlane-tnei/gb-data-pull/assets/67691071/0cb54d0f-3de1-4a6f-bac2-9ee115fd17d9)
+
+
