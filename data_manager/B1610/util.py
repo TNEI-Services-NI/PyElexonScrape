@@ -16,12 +16,40 @@ import os.path
 import shutil
 import time
 from functools import reduce
-
+import sp2ts
+import tqdm
 import pandas as pd
 
 import data_manager._config as cf
 from data_manager._data_definitions import *
 
+
+def handle_settlement_periods(settlement_data):
+    """
+    Handle settlement periods in the given settlement_data DataFrame.
+
+    This function performs the following tasks:
+    - Converts 'date' column to datetime and extracts only the date part.
+    - Calculates Unix timestamps from 'date' and 'period' columns using sp2ts function.
+    - Converts Unix timestamps to datetime to get the corresponding settlement end datetime.
+
+    Parameters:
+        settlement_data (pd.DataFrame): DataFrame containing settlement data.
+            Must have columns "date" and "period".
+
+    Returns:
+        pd.DataFrame: DataFrame with added 'settlement_end' column.
+    """
+    settlement_data = settlement_data.copy()
+
+    settlement_data['settlement_end'] = (pd.to_datetime(settlement_data['date']) +
+                                         pd.to_timedelta((settlement_data['period'].astype(int, errors='ignore')), unit='m') * 30)
+
+    settlement_data['settlement_end'] = pd.to_datetime(settlement_data['settlement_end'], utc=True)
+
+    settlement_data['unix'] = (settlement_data['settlement_end'] - pd.Timestamp("1970-01-01")) // pd.Timedelta('1s')
+
+    return settlement_data
 
 def merge_data():
     date_settlement = list(filter(lambda x: ('.gitkeep' not in x), os.listdir(cf.B1610_INPUT_DIR)))
@@ -37,10 +65,19 @@ def merge_data():
 
     data = pd.concat(data)
 
-    if os.path.isfile('/'.join([cf.B1610_PROCESSED_DIR, 'gsp_generation.csv'])):
-        data.to_csv('/'.join([cf.B1610_PROCESSED_DIR, 'gsp_generation.csv']), index=False, header=False, mode='a')
-    else:
-        data.to_csv('/'.join([cf.B1610_PROCESSED_DIR, 'gsp_generation.csv']), index=False)
+    # Rename columns for clarity
+    bmu_data = data.rename(columns={
+        'Settlement Date': 'date',
+        'SP': 'period',
+    })
+
+    # Handle settlement periods
+    bmu_data = handle_settlement_periods(bmu_data)
+
+    # Set multi-index based on columns and then reset index
+    bmu_data = bmu_data.set_index(['date', 'period', 'settlement_end', 'unix']).reset_index()
+
+    bmu_data.to_feather('/'.join([cf.B1610_PROCESSED_DIR, 'bmu_generation.feather']))
 
 
 

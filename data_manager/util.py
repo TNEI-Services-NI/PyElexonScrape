@@ -24,26 +24,25 @@ def read_fill_and_write_settlement_dates(options):
         pd.DataFrame: Updated DataFrame containing settlement dates information.
     """
     # Read the existing settlement dates DataFrame
-    all_dates = pd.read_pickle('settlement_dates.p')
+    all_dates = pd.read_feather('settlement_dates.f')
 
-    # Calculate date sequence based on existing dates
-    dates = pd.to_datetime(all_dates['date'])
-    from_ = dates.min()
-    to_ = dates.max()
-    date_sequence = pd.date_range(from_, to_, freq='d')
+    date_sequence = pd.date_range(min(options['date']), max(options['date']))
 
     # Check if existing dates cover the entire date sequence
     if date_sequence.isin(all_dates['date']).all():
         pass  # No action needed if all dates are present
     else:
         # Retrieve missing dates and update the DataFrame
-        if pd.to_datetime(options['date'][1]) > to_:
-            all_dates_ = P114_data_pull.get_dates(to_.strftime("%Y-%m-%d"), options['date'][1])
-            all_dates_.loc[:, 'date'] = pd.to_datetime(all_dates_.loc[:, 'date'])
-            all_dates_.loc[:, 'settlement'] = pd.to_datetime(all_dates_.loc[:, 'settlement'])
-            all_dates = pd.concat([all_dates, all_dates_])
-            all_dates = all_dates.sort_values(by=['group', 'date', 'settlement']).drop_duplicates()
-            all_dates.to_pickle('settlement_dates.p')
+        missing_dates = date_sequence.to_series().loc[~date_sequence.to_series().isin(all_dates['date'])].dt.date
+        all_dates_ = P114_data_pull.get_dates(dates=missing_dates)
+        all_dates_.loc[:, 'date'] = pd.to_datetime(all_dates_.loc[:, 'date'])
+        all_dates_.loc[:, 'settlement'] = pd.to_datetime(all_dates_.loc[:, 'settlement'])
+        all_dates = pd.concat([all_dates, all_dates_])
+        all_dates = all_dates.sort_values(by=['group', 'date', 'settlement', 'message'])\
+            .drop_duplicates(subset=['group', 'date', 'settlement', 'message'])
+        latest = all_dates.groupby(['date', 'message', 'group'])['settlement'].idxmax()
+        all_dates = all_dates.loc[latest, :]
+        all_dates.to_feather('settlement_dates.f')
 
     return all_dates
 
@@ -95,7 +94,7 @@ def filter_settlement_dates(start_date, end_date, settlement_dates, PROCESSED_FE
     settlement_dates = settlement_dates.loc[settlement_dates['message'].isin(PROCESSED_FEEDS), :]
 
     # Drop duplicates, keeping the last entry for each unique group and date
-    return settlement_dates.drop_duplicates(subset=['group', 'date'], keep='last')
+    return settlement_dates.sort_values(by=['group', 'date', 'message', 'settlement']).drop_duplicates(subset=['group', 'date', 'message'], keep='last')
 
 
 def create_file_merge_list(start_date, end_date, settlement_dates, P114_INPUT_DIR):

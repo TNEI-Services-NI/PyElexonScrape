@@ -26,9 +26,9 @@ PROCESSED_FEEDS = ['C0301']
 MAX_POOLS = 1
 
 request_interval_mins = 0
-request_interval_secs = 0
+request_interval_secs = 5
 
-pull_pools = 0
+pull_pools = 1
 
 reverse = False
 

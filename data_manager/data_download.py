@@ -6,6 +6,7 @@ import time
 
 import numpy as np
 import pandas as pd
+import tqdm
 
 import data_manager.B1610.data_pull as B1610_data_pull
 import data_manager.B1610.util as B1610_util
@@ -74,7 +75,7 @@ def run_demand_parallel(*args, **options):
         os.makedirs(cf.P114_INPUT_DIR.replace('/gz/', "/done/"))
 
     # Read or generate settlement dates
-    if os.path.exists('settlement_dates.p'):
+    if os.path.exists('settlement_dates.f'):
         settlement_dates = dm_util.read_fill_and_write_settlement_dates(options)
     else:
         settlement_dates = dm_util.read_and_write_settlement_dates()
@@ -104,14 +105,15 @@ def run_demand_parallel(*args, **options):
         for p in workers:
             p.join()
 
-    workers = [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in range(0, cf.MAX_POOLS)]
-
-    # Start worker processes for data combining
-    for p in workers:
-        p.start()
-    # Wait for worker processes to finish
-    for p in workers:
-        p.join()
+    # print('Combining data')
+    # workers = [mp.Process(target=p114_util.combine_data, args=(q, pool,)) for pool in range(0, cf.MAX_POOLS)]
+    #
+    # # Start worker processes for data combining
+    # for p in workers:
+    #     p.start()
+    # # Wait for worker processes to finish
+    # for p in workers:
+    #     p.join()
 
     # Merge data from the combined files
     p114_util.merge_data(cf.MAX_POOLS)
@@ -196,36 +198,36 @@ def run_generation(*args, **options):
     completed_requests = 0
 
     # Iterate through each date in the specified range
-    while date <= end_date:
-        print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
-        print("downloading data for " + '{:%Y-%m-%d}'.format(date))
+    for date in tqdm.tqdm(pd.date_range(start_date, end_date)):
+        # print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
+        # print("downloading data for " + '{:%Y-%m-%d}'.format(date))
 
         # Convert date to string format
         date_string = datetime.datetime.strftime(date, '%Y-%m-%d')
 
         # Iterate through each settlement period (1 to 50)
-        for settlement_period in range(1, 50 + 1):
-            filename = '_'.join([date_string, str(settlement_period)]) + '.csv'
+        filename = 'B1610_' + date_string + '.csv'
 
-            # Check if the file exists and if overwrite is not set
-            if os.path.isfile(cf.B1610_INPUT_DIR + filename) and not 'overwrite' in options.keys():
+        # Check if the file exists and if overwrite is not set
+        if os.path.isfile(cf.B1610_INPUT_DIR + filename) and not 'overwrite' in options.keys():
+            continue
+
+        # Calculate the wait time for rate limiting
+        wait = ((dt.datetime.now() - t0).seconds) - (cf.request_interval_secs * completed_requests + 1)
+        wait = -1 * wait if wait < 0 else 0
+        time.sleep(wait)
+
+        # Check if it's time to make a request based on rate limiting
+        if ((dt.datetime.now() - t0).seconds) - (cf.request_interval_secs * completed_requests) > 0:
+            # Call the function to download B1610 data
+            B1610_data_pull.get_B1610_data(date_string, filename, '*')
+            completed_requests += -1 if cf.reverse else 1
+            if os.path.getsize(os.path.join(cf.B1610_INPUT_DIR, filename)) < 1000:
                 continue
-
-            # Calculate the wait time for rate limiting
-            wait = ((dt.datetime.now() - t0).seconds) - (cf.request_interval_secs * completed_requests + 1)
-            time.sleep(-1 * wait) if wait < 0 else None
-
-            # Check if it's time to make a request based on rate limiting
-            if ((dt.datetime.now() - t0).seconds) - (cf.request_interval_secs * completed_requests) > 0:
-                # Call the function to download B1610 data
-                B1610_data_pull.get_B1610_data(date_string, filename, settlement_period)
-                completed_requests += -1 if cf.reverse else 1
-
-        # Move to the next date
-        date += dt.timedelta(days=-1 if cf.reverse else 1)
 
     # Merge the downloaded data files
     B1610_util.merge_data()
+
 
 
 def run(*args, **options):
@@ -269,3 +271,10 @@ def run(*args, **options):
         elif options['type'] == 'generation':
             run_generation(*args, **options)
 
+
+if __name__ == '__main__':
+    # run(date=['2010-03-01', '2023-09-30'], type='generation', mode='parallel')
+    # run(date=['2014-10-01', '2023-09-30'], type='generation', mode='parallel')
+    # run(date=['2014-11-06', '2023-09-30'], type='generation', mode='parallel')
+    # run(date=['2015-10-01', '2023-09-30'], type='generation', mode='parallel')
+    run(date=['2023-07-01', '2023-09-30'], type='generation', mode='')

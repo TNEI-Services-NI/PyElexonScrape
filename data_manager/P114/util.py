@@ -147,7 +147,7 @@ def fix_DST_days():
     print()
 
 
-def merge_data(max_pools=7):
+def merge_data():
     data_dir = cf.P114_INPUT_DIR.replace('gz/', '')
 
     files = glob.glob(f'{data_dir}/**/*.p', recursive=True)
@@ -158,33 +158,28 @@ def merge_data(max_pools=7):
     if not os.path.exists(cf.P114_INPUT_DIR.replace('gz/', 'gsps/')):
         os.makedirs(cf.P114_INPUT_DIR.replace('gz/', 'gsps/'))
 
-    for gsp, file in files.groupby('gsp'):
+    data = []
+    for gsp, file in tqdm(files.groupby('gsp')):
         df_data = pd.concat([pd.read_pickle(f) for f in file['file']])
         df_data = df_data.sort_values(by='date')
-        missing_dates = missing_dates.union(set(pd.date_range(df_data['date'].sort_values().iloc[0], df_data['date'].sort_values().iloc[-1]).to_series().apply(lambda x: x.date())) - set(df_data['date']))
+        date_range = pd.date_range(df_data['date'].min(), df_data['date'].max())
+        missing_dates = date_range.to_series().loc[~date_range.isin(df_data['date'])].tolist()
         lvl0_col = df_data.xs('level_0', level=0, axis=1, drop_level=False).columns.tolist()
         ei_cols = df_data.xs('ei', level=0, axis=1, drop_level=False).columns.tolist()
         ii_cols = df_data.xs('ii', level=0, axis=1, drop_level=False).columns.tolist()
         vol_cols = df_data.xs('vol', level=0, axis=1, drop_level=False).columns.tolist()
-        index = set(df_data.columns)-set(set(ei_cols).union(set(ii_cols)).union(set(vol_cols)))-set(lvl0_col)
+        index = set(df_data.columns) - set(set(ei_cols).union(set(ii_cols)).union(set(vol_cols))) - set(lvl0_col)
         index = list(sorted(list(index)))
         df_data = df_data.set_index(index)
         df_data.index.names = [i[0] for i in index]
+        df_data = df_data.drop(columns=lvl0_col)
         df_data = df_data.melt(ignore_index=False)
         df_data.columns = ['attribute', 'sp', 'value']
         df_data = df_data.dropna(subset=['value'])
-        df_data.to_pickle('/'.join([cf.P114_INPUT_DIR.replace('gz/', 'gsps/'), f'gspdemand-{gsp}.p']))
-        break
-    #
-    # [shutil.rmtree('/'.join([data_dir, x])) for x in pool_folders]
-    # shutil.make_archive(cf.P114_INPUT_DIR.replace('gz/', 'gsps'), 'zip', cf.P114_INPUT_DIR.replace('gz/', 'gsps/'))
-    #
-    # missing_dates = pd.DataFrame({'missing': sorted(list(missing_dates))})
-    # missing_dates.to_csv('missing_dates.csv')
-    #
-    # shutil.move(cf.P114_INPUT_DIR.replace('gz/', 'gsps.zip'),
-    #             r'N:\National Grid\13771 - Probabilistic Stability\3 - Data\elexon\gsps_10_19.zip')
-
+        df_data['year'] = pd.to_datetime(df_data.reset_index()['date']).dt.year.values
+        df_data['month'] = pd.to_datetime(df_data.reset_index()['date']).dt.month.values
+        df_data['value'] = df_data['value'].astype(float)
+        df_data.to_feather('/'.join([cf.P114_INPUT_DIR.replace('gz/', 'gsps/'), f'gspdemand-{gsp}.f']))
 
 def merge_data_subsplit():
     pool_folders = list(filter(lambda x: ('.gitkeep' not in x)&('gz' not in x)&('done' not in x)&('fixed_dst' not in x)&('non_target' not in x), os.listdir(cf.P114_INPUT_DIR.replace('gz/', ''))))
@@ -278,6 +273,7 @@ def combine_data(q: mp.Queue, pool: int):
                         if len(v) > 0:
                             if k == 'MPD':
                                 for gsp, df in v.reset_index(level=0).groupby('level_0'):
+                                    break
                                     filedir = foldername + f'gspdemand-{gsp}.p'
                                     df = df.iloc[:, 1:]
                                     if os.path.isfile(filedir):

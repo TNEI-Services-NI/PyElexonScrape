@@ -143,9 +143,9 @@ def get_p114_file(filename, overwrite=False):
         os.remove(cf.P114_INPUT_DIR + '~' + filename)
 
 
-def get_dates(from_='30-04-2010', to_='31-12-2020'):
+def get_dates(from_=None, to_=None, dates=None):
     all_dates = []
-    for p114_date_ in pd.date_range(from_, to_):
+    for p114_date_ in pd.date_range(from_, to_) if dates is None else dates:
         print(p114_date_)
         response = requests.get(cf.P114_LIST_URL.format(cf.ELEXON_KEY,
                                                      dt.datetime.strftime(p114_date_, "%Y-%m-%d")))
@@ -186,12 +186,3 @@ def pull_data_parallel(dates, t0, q, status_q):
     pull_p114_date_files_parallel(dates, q, t0)
 
 
-def pull_data(date, end_date, t0):
-    completed_requests = 0
-    while date <= end_date:
-        if ((dt.datetime.now() - t0).seconds / 60) - (cf.request_interval_mins * completed_requests) > 0:
-            print('{:%Y-%m-%d %H:%M:%S}'.format(dt.datetime.now()))
-            print("downloading data for " + '{:%Y-%m-%d}'.format(date))
-            pull_p114_date_files(date)
-            date += dt.timedelta(days=1)
-            completed_requests += 1
